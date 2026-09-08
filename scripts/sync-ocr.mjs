@@ -15,10 +15,12 @@
  *
  * The language model is the `fast` LSTM build: 1.9 MB against roughly 15 MB
  * for the full one, and accuracy on printed documents is close. It is fetched
- * once and then lives in the repo's gitignored `public/`.
+ * once, checked against a pinned hash, and then lives in the repo's gitignored
+ * `public/`.
  *
  * Run with `node scripts/sync-ocr.mjs`.
  */
+import { createHash } from 'node:crypto';
 import { copyFile, mkdir, readFile, stat, writeFile } from 'node:fs/promises';
 import { createRequire } from 'node:module';
 import { dirname, join } from 'node:path';
@@ -63,38 +65,71 @@ for (const [from, name] of copies) {
   console.log(`  ${name} (${(size / 1024 / 1024).toFixed(2)} MB)`);
 }
 
-// The language model. Downloaded once; skipped when already present, so this
-// script stays fast and works offline afterwards.
+// The language model. Downloaded once and verified; skipped when a copy that
+// matches the pin is already on disk, so this script stays fast and works
+// offline afterwards.
 const MODEL = 'eng.traineddata.gz';
 const MODEL_URL =
   'https://raw.githubusercontent.com/naptha/tessdata/gh-pages/4.0.0_fast/eng.traineddata.gz';
+
+/**
+ * SHA-256 of the model, pinned.
+ *
+ * The file comes from a third party's GitHub Pages branch, fetched at build
+ * time. Without a pin, anyone who could write to that branch would change what
+ * every later build's recogniser reads, and nothing here would notice. The
+ * hash is of the file at gh-pages commit f787a9c (2019-06-02), which is what
+ * the URL still serves; it is checked on every download and on any copy
+ * already on disk. To move to a newer model: download it, check it by hand,
+ * and change this constant in the same commit.
+ */
+const MODEL_SHA256 = '18c1ac52b75e35d44735fb6c2a60acfaf23033524653200738e98f0243edb75b';
 const modelPath = join(outDir, MODEL);
 
-let haveModel = false;
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+
+let model = null;
 try {
-  const { size } = await stat(modelPath);
-  haveModel = size > 500_000;
+  const existing = await readFile(modelPath);
+  if (sha256(existing) === MODEL_SHA256) {
+    model = existing;
+  } else {
+    console.warn(`  ${MODEL} on disk does not match the pinned hash; fetching it again`);
+  }
 } catch {
-  haveModel = false;
+  // Not downloaded yet.
 }
 
-if (haveModel) {
-  console.log(`  ${MODEL} (already present)`);
+if (model) {
+  console.log(`  ${MODEL} (already present, hash verified)`);
 } else {
   const res = await fetch(MODEL_URL);
   if (!res.ok) {
     throw new Error(
       `Could not download the OCR language model (HTTP ${res.status}). ` +
-        `Fetch it manually from ${MODEL_URL} into public/tesseract/.`,
+        `Fetch it manually from ${MODEL_URL} into public/tesseract/ and check its SHA-256 ` +
+        `against MODEL_SHA256 in scripts/sync-ocr.mjs.`,
     );
   }
   const bytes = new Uint8Array(await res.arrayBuffer());
+  const actual = sha256(bytes);
+  if (actual !== MODEL_SHA256) {
+    throw new Error(
+      `The OCR language model served at ${MODEL_URL} does not match the pinned SHA-256.\n` +
+        `  expected ${MODEL_SHA256}\n` +
+        `  received ${actual}\n` +
+        `Nothing was written. The upstream file has changed; if that is expected, verify ` +
+        `the new file and update MODEL_SHA256 in scripts/sync-ocr.mjs in the same commit.`,
+    );
+  }
   await writeFile(modelPath, bytes);
-  total += bytes.byteLength;
-  console.log(`  ${MODEL} (${(bytes.byteLength / 1024 / 1024).toFixed(2)} MB, downloaded)`);
+  model = bytes;
+  console.log(
+    `  ${MODEL} (${(bytes.byteLength / 1024 / 1024).toFixed(2)} MB, downloaded and verified)`,
+  );
 }
+total += model.byteLength;
 
-const { size: modelSize } = await stat(modelPath);
 await writeFile(
   join(outDir, 'assets.json'),
   JSON.stringify(
@@ -104,6 +139,7 @@ await writeFile(
       ).version,
       core: 'tesseract-core-simd-lstm',
       language: 'eng (tessdata_fast 4.0.0)',
+      languageSha256: MODEL_SHA256,
       syncedAt: new Date().toISOString(),
     },
     null,
@@ -111,6 +147,4 @@ await writeFile(
   ) + '\n',
 );
 
-console.log(
-  `OCR assets → public/tesseract/ (${((total + (haveModel ? modelSize : 0)) / 1024 / 1024).toFixed(1)} MB total)`,
-);
+console.log(`OCR assets → public/tesseract/ (${(total / 1024 / 1024).toFixed(1)} MB total)`);

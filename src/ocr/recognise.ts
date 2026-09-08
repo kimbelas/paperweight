@@ -93,6 +93,12 @@ async function getWorker(): Promise<TesseractWorker> {
       // local file, so a second copy in the browser's storage buys nothing.
       gzip: true,
       cacheMethod: 'none',
+      // Spawn the worker by its URL. The default wraps it in a blob: URL that
+      // importScripts the real file, a workaround for cross-origin hosting.
+      // The worker is same-origin here, and the shim would need
+      // `worker-src blob:` in the Content-Security-Policy that
+      // scripts/write-headers.mjs emits.
+      workerBlobURL: false,
       legacyCore: false,
       legacyLang: false,
       logger: (message: { progress?: number; status?: string }) => {

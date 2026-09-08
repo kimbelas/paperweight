@@ -98,15 +98,18 @@ test('boots the engine and renders a document', async ({ page }) => {
   expect(errors).toEqual([]);
 });
 
-test('never sends the document anywhere', async ({ page }) => {
+test('never sends the document anywhere', async ({ page, baseURL }) => {
   // The core promise of the app. Any request carrying a request body, or any
   // cross-origin request at all, after the document is open is a violation.
+  // "Same origin" is whatever server this run is against: the static server
+  // in the base config or wrangler dev in the deploy one.
+  const origin = new URL(baseURL!).origin;
   const suspicious: string[] = [];
 
   await page.route('**/*', async (route) => {
     const request = route.request();
     const url = request.url();
-    const sameOrigin = url.startsWith('http://127.0.0.1:4173');
+    const sameOrigin = url.startsWith(origin);
     if (!sameOrigin && !url.startsWith('data:') && !url.startsWith('blob:')) {
       suspicious.push(`cross-origin ${request.method()} ${url}`);
     }

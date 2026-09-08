@@ -1,0 +1,29 @@
+/**
+ * The deployment, as code.
+ *
+ * Paperweight is a folder of static files, so this is an assets-only Worker:
+ * no script, just the `out/` directory that `pnpm build` produces, served from
+ * Cloudflare's edge. Response headers, including the Content-Security-Policy,
+ * come from `out/_headers`, which `scripts/write-headers.mjs` writes after
+ * every build.
+ *
+ * Deploys run from CI (`.github/workflows/ci.yml`) with `wrangler deploy`.
+ * `pnpm preview` serves the same build locally through `wrangler dev`, with
+ * the same routing and the same headers, and `pnpm test:e2e:deploy` runs the
+ * browser suite against exactly that.
+ */
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "paperweight",
+  "compatibility_date": "2026-09-08",
+  "assets": {
+    "directory": "./out",
+    // An unknown path gets the exported 404 page with a 404 status. The app
+    // is a single route, so there is nothing to rewrite to index.html.
+    "not_found_handling": "404-page"
+  },
+  // A workers.dev URL for production, and a preview URL for every uploaded
+  // version, which CI posts on pull requests.
+  "workers_dev": true,
+  "preview_urls": true
+}

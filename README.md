@@ -52,6 +52,25 @@ pnpm build        # produces out/, a folder of static files
 `pnpm build` emits a plain static site. It can be hosted anywhere, and one of
 the browser tests serves it with nothing but a static file server to prove it.
 
+## Deploying
+
+`out/` deploys to Cloudflare Workers as static assets. The Worker is described
+in `wrangler.jsonc`. Response headers, including a Content-Security-Policy that
+pins the build's inline scripts by hash, come from `out/_headers`, which
+`scripts/write-headers.mjs` writes after every build.
+
+```
+pnpm test:e2e:deploy   # the browser suite against wrangler dev, headers included
+pnpm preview           # serve the last build the way Cloudflare will
+pnpm exec wrangler deploy
+```
+
+CI (`.github/workflows/ci.yml`) does the same on every push: typecheck, engine
+tests, build, browser tests against `wrangler dev`, then `wrangler deploy` of
+the tested `out/` on `main`, or a preview URL posted on a pull request. It
+needs two repository secrets: `CLOUDFLARE_API_TOKEN`, a token with the
+"Workers Scripts: Edit" permission, and `CLOUDFLARE_ACCOUNT_ID`.
+
 ## Layout
 
 | Path | What it is |
@@ -65,6 +84,9 @@ the browser tests serves it with nothing but a static file server to prove it.
 | `src/ocr/` | Reading scans with tesseract.js |
 | `src/io/` | Files, printing and local storage |
 | `fixtures/` | Hand-built PDFs pinning the structural edge cases |
+| `tests/deploy/` | Browser tests that only make sense with the deployment's headers |
+| `wrangler.jsonc` | The Cloudflare deployment, as code |
+| `.github/workflows/ci.yml` | Test, build and deploy on every push |
 
 ## Licences
 

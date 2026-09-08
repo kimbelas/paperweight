@@ -235,10 +235,11 @@ the decisions. `docs/research/01-editing-engines.md` and
   in `public/`, loaded by plain URL, which behaves identically under a static
   export and on any host. `predev` and `prebuild` run it.
 
-- **Single-threaded WASM only.** `output: 'export'` cannot set response
-  headers, so COOP/COEP are unavailable and `SharedArrayBuffer` with them.
-  Keeping the engine single-threaded is what keeps the deploy story to
-  "copy `out/` anywhere".
+- **Single-threaded WASM only.** A static export sets no response headers of
+  its own. On Cloudflare `out/_headers` adds some, but the app must never
+  *depend* on a header to function, so COOP/COEP stay out and
+  `SharedArrayBuffer` with them. Keeping the engine single-threaded is what
+  keeps the deploy story to "copy `out/` anywhere".
 
 - **Nothing leaves the device.** There is no server, no upload path, no
   analytics. Playwright tests assert zero cross-origin requests and zero
@@ -250,6 +251,21 @@ the decisions. `docs/research/01-editing-engines.md` and
   All three are copied into `public/tesseract/` by `scripts/sync-ocr.mjs` and
   the paths are pinned in `src/ocr/recognise.ts`. If OCR ever starts making
   network requests, that is the wiring to check.
+
+- **The Content-Security-Policy is generated, and it is strict.**
+  `scripts/write-headers.mjs` runs as `postbuild` and writes `out/_headers`
+  for Cloudflare: every origin is `'self'`, inline scripts are allowed by
+  the hash of exactly what this build emitted, and there is no
+  `'unsafe-inline'` or `'unsafe-eval'` for scripts. The policy is the
+  "nothing leaves the device" promise stated as a header, and it is also why
+  a document opened here cannot be exfiltrated by an injected script. Anything
+  new the app loads — a font, a frame, a worker, a fetch, an inline script —
+  has to be reflected in that script, and the test that tells you so is
+  `pnpm test:e2e:deploy`, which runs the whole browser suite under the real
+  headers through `wrangler dev`. Fix the app or the directive; never widen
+  the policy to make a test pass. The OCR model download in `sync-ocr.mjs`
+  is pinned by SHA-256 for the same reason: a build must not trust a third
+  party's branch to still contain what it did.
 
 - **Editing a scan is a different operation, and the UI must keep it
   distinct.** A scan has no text objects; its words are pixels. OCR recovers
@@ -266,18 +282,21 @@ src/engine/    PDFium. Runs in the worker. types.ts is the wire format.
 src/editor/    React. transform.ts owns coordinate conversion.
 src/ocr/       tesseract.js, for reading scans. Never touches PDFium.
 src/io/        Files, printing and local storage, with browser fallbacks.
-scripts/       sync-wasm, sync-ocr, build-worker, make-fixtures,
-               make-scan-fixture.
+scripts/       sync-wasm, sync-ocr, build-worker, write-headers,
+               make-fixtures, make-scan-fixture.
 fixtures/      Hand-built PDFs pinning the structural edge cases.
                fixtures/local/ is gitignored: real documents go there.
 tests/engine/  vitest, driving the real WASM under Node.
 tests/e2e/     Playwright, against the built static export.
+tests/deploy/  Playwright, only under wrangler dev: the response headers.
+wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
 ```
 
 ### Working on this
 
 - `pnpm dev` (runs `sync-wasm`, `sync-ocr` and `build-worker` first)
-- `pnpm test` engine tests · `pnpm test:e2e` browser tests
+- `pnpm test` engine tests · `pnpm test:e2e` browser tests ·
+  `pnpm test:e2e:deploy` the same under wrangler dev with the real headers
 - `pnpm typecheck` · `pnpm build`
 - After changing anything in `src/engine/`, run `pnpm build:worker` or the
   browser will keep running the previous engine.

@@ -66,15 +66,17 @@ test('says a scan has no text, and offers to read it', async ({ page }) => {
   await expect(page.getByRole('button', { name: /read this page/i })).toBeVisible();
 });
 
-test('reads a scanned page without contacting anything', async ({ page }) => {
+test('reads a scanned page without contacting anything', async ({ page, baseURL }) => {
   // OCR would fetch its worker, core and language model from a CDN by default.
   // All three are served locally, and this is what holds that in place: the
-  // whole promise of the app is that nothing leaves the device.
+  // whole promise of the app is that nothing leaves the device. The origin is
+  // taken from the run's baseURL so the test holds under wrangler dev too.
+  const origin = new URL(baseURL!).origin;
   const external: string[] = [];
   await page.route('**/*', async (route) => {
     const url = route.request().url();
     if (
-      !url.startsWith('http://127.0.0.1:4173') &&
+      !url.startsWith(origin) &&
       !url.startsWith('data:') &&
       !url.startsWith('blob:')
     ) {

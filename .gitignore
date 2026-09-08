@@ -13,3 +13,4 @@ public/engine-worker.js
 public/engine-worker.js.map
 public/engine-worker.meta.json
 public/tesseract/
+.wrangler/

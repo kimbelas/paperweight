@@ -1,0 +1,185 @@
+# Test, build, and deploy Paperweight.
+#
+# Every push to main and every pull request is typechecked, run through the
+# engine tests, built, and then run through the browser suite against
+# `wrangler dev`, which serves the build the way Cloudflare will, response
+# headers included. A push to main that passes is deployed with the exact
+# `out/` folder that was tested, not a rebuild. A pull request from this
+# repository gets a preview URL posted on it instead.
+#
+# The deployment itself is described in wrangler.jsonc. Two repository secrets
+# are needed: CLOUDFLARE_API_TOKEN, a token with the "Workers Scripts: Edit"
+# permission, and CLOUDFLARE_ACCOUNT_ID.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+# A newer push to a pull request supersedes the run in progress. A push to
+# main does not, so a deployment is never interrupted halfway.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+permissions:
+  contents: read
+
+env:
+  WRANGLER_SEND_METRICS: 'false'
+
+jobs:
+  test:
+    name: Test and build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - run: pnpm typecheck
+
+      - name: Engine tests
+        run: pnpm test
+
+      - name: Build the static export
+        # prebuild copies PDFium, fetches the OCR model and checks it against
+        # its pinned hash; postbuild writes out/_headers with the
+        # Content-Security-Policy for this build's inline scripts.
+        run: pnpm build
+
+      - name: Install Chromium for Playwright
+        run: pnpm exec playwright install --with-deps chromium
+
+      - name: Browser tests against wrangler dev
+        run: pnpm test:e2e:deploy
+
+      - name: Keep the tested build for deployment
+        uses: actions/upload-artifact@v7
+        with:
+          name: site
+          path: out
+          retention-days: 7
+          if-no-files-found: error
+
+      - name: Keep traces from failed browser tests
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-traces
+          path: test-results
+          retention-days: 7
+          if-no-files-found: ignore
+
+  deploy:
+    name: Deploy to Cloudflare
+    needs: test
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    environment:
+      name: production
+      url: ${{ steps.deploy.outputs.deployment-url }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # The lockfile pins the same wrangler that served the tests.
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: out
+
+      - name: wrangler deploy
+        id: deploy
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: pnpm
+          command: deploy
+
+  preview:
+    name: Preview URL
+    needs: test
+    # Forks cannot see the secrets, so only pull requests from this repository
+    # get a preview.
+    if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      - run: pnpm install --frozen-lockfile
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: out
+
+      - name: wrangler versions upload
+        id: upload
+        uses: cloudflare/wrangler-action@v4
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          accountId: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+          packageManager: pnpm
+          command: versions upload --preview-alias pr-${{ github.event.number }}
+
+      - name: Post the preview URL on the pull request
+        uses: actions/github-script@v9
+        env:
+          UPLOAD_OUTPUT: ${{ steps.upload.outputs.command-output }}
+        with:
+          script: |
+            const output = process.env.UPLOAD_OUTPUT ?? '';
+            const urls = [...new Set(output.match(/https:\/\/[\w.-]+\.workers\.dev\S*/g) ?? [])];
+            const marker = '<!-- paperweight-preview -->';
+            const body = urls.length
+              ? `${marker}\n**Preview:** ${urls.map((u) => `<${u}>`).join(' · ')}\n\nBuilt from ${context.sha.slice(0, 7)}.`
+              : `${marker}\nThe preview upload ran, but no workers.dev URL was found in its output.`;
+
+            const { owner, repo } = context.repo;
+            const issue_number = context.issue.number;
+            const { data: comments } = await github.rest.issues.listComments({ owner, repo, issue_number, per_page: 100 });
+            const existing = comments.find((c) => c.body?.includes(marker));
+            if (existing) {
+              await github.rest.issues.updateComment({ owner, repo, comment_id: existing.id, body });
+            } else {
+              await github.rest.issues.createComment({ owner, repo, issue_number, body });
+            }
