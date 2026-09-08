@@ -1,0 +1,15 @@
+# Binary files, marked so git never applies line-ending conversion to them.
+#
+# This is load-bearing for the fixtures rather than tidiness. A hand-built PDF
+# records byte offsets in its xref table, so a checkout that turned every LF
+# into CRLF would shift every object past the first newline and leave the file
+# claiming an object is somewhere it is not. Git guesses "text" for these
+# because they are largely ASCII, and on Windows that guess silently produces
+# corrupt fixtures on clone.
+*.pdf binary
+*.ttf binary
+*.otf binary
+*.wasm binary
+*.gz binary
+*.png binary
+*.jpg binary

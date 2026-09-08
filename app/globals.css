@@ -1,0 +1,171 @@
+@import 'tailwindcss';
+
+/*
+ * Theme tokens.
+ *
+ * The complete light palette is defined on bare `:root`, and only the values
+ * that change are redefined for dark. Every colour has a definition outside
+ * any media query, so nothing depends on a preference being readable.
+ *
+ * **Light is the default and `prefers-color-scheme` is deliberately not
+ * consulted.** A PDF page is a white sheet whatever the operating system is
+ * set to, so following the system preference put a bright rectangle in the
+ * middle of a dark room — and the thumbnail rail beside it. Dark is chosen
+ * with the toggle in the top bar and remembered; see `src/editor/theme.ts`.
+ * The theme is always stamped on the root element, so a media query here
+ * would either never fire or fight the stamp.
+ */
+:root {
+  --app-bg: #f4f4f5;
+  --app-panel: #ffffff;
+  --app-panel-2: #fafafa;
+  --app-border: #e4e4e7;
+  --app-border-strong: #d4d4d8;
+  --app-text: #18181b;
+  --app-text-dim: #52525b;
+  --app-text-faint: #8b8b93;
+  --app-accent: #2563eb;
+  --app-accent-hover: #1d4ed8;
+  --app-accent-soft: #dbeafe;
+  --app-danger: #dc2626;
+  --app-danger-soft: #fee2e2;
+  --app-warn: #b45309;
+  --app-warn-soft: #fef3c7;
+  --app-ok: #15803d;
+  --app-ok-soft: #dcfce7;
+  --app-canvas: #d8d8dc;
+  --app-shadow: 0 1px 2px rgb(0 0 0 / 0.06), 0 4px 12px rgb(0 0 0 / 0.05);
+  --app-menu-shadow: 0 2px 4px rgb(0 0 0 / 0.06), 0 12px 32px rgb(0 0 0 / 0.14);
+  --app-hover: #f1f1f3;
+  --app-selection: #2563eb;
+  color-scheme: light;
+}
+
+:root[data-theme='dark'] {
+  --app-bg: #18181b;
+  --app-panel: #1f1f23;
+  --app-panel-2: #26262b;
+  --app-border: #33333a;
+  --app-border-strong: #45454e;
+  --app-text: #f4f4f5;
+  --app-text-dim: #a1a1aa;
+  --app-text-faint: #71717a;
+  --app-accent: #3b82f6;
+  --app-accent-hover: #60a5fa;
+  --app-accent-soft: #1e3a5f;
+  --app-danger: #f87171;
+  --app-danger-soft: #451a1a;
+  --app-warn: #fbbf24;
+  --app-warn-soft: #422f06;
+  --app-ok: #4ade80;
+  --app-ok-soft: #0f2e1a;
+  --app-canvas: #101013;
+  --app-shadow: 0 1px 2px rgb(0 0 0 / 0.4), 0 4px 16px rgb(0 0 0 / 0.3);
+  --app-menu-shadow: 0 2px 4px rgb(0 0 0 / 0.5), 0 12px 32px rgb(0 0 0 / 0.45);
+  --app-hover: #2a2a30;
+  --app-selection: #3b82f6;
+  color-scheme: dark;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--app-bg);
+  color: var(--app-text);
+  font-family:
+    ui-sans-serif, system-ui, -apple-system, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  font-size: 14px;
+  -webkit-font-smoothing: antialiased;
+  overscroll-behavior: none;
+}
+
+/* The page canvas: a paper sheet on a darker ground. */
+.page-sheet {
+  background: #ffffff;
+  box-shadow: var(--app-shadow);
+}
+
+/* Focus ring, consistent across controls. */
+.focus-ring:focus-visible {
+  outline: 2px solid var(--app-accent);
+  outline-offset: 2px;
+}
+
+/*
+ * Hover grounds.
+ *
+ * The resting colours of most controls here come from inline styles, because
+ * they are chosen from theme tokens per state. A hover state cannot be written
+ * inline at all, so it lives in a class — and the class has to own the resting
+ * background too, or the inline value would win and the hover would never
+ * show.
+ */
+.btn-quiet {
+  background: transparent;
+  transition: background-color 90ms ease-out;
+}
+
+.btn-quiet:hover:not(:disabled) {
+  background: var(--app-hover);
+}
+
+.btn-solid {
+  background: var(--app-accent);
+  transition: background-color 90ms ease-out;
+}
+
+.btn-solid:hover:not(:disabled) {
+  background: var(--app-accent-hover);
+}
+
+/* Scrollbars that do not fight the theme. */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--app-border-strong) transparent;
+}
+
+*::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+
+*::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+*::-webkit-scrollbar-thumb {
+  background: var(--app-border-strong);
+  border-radius: 5px;
+  border: 2px solid transparent;
+  background-clip: content-box;
+}
+
+/*
+ * The inline text editor.
+ *
+ * It sits exactly where the original line sits, so it must not add any
+ * geometry of its own: no padding, no border, no background, and a line
+ * height that does not shift the baseline.
+ */
+.text-edit-input {
+  border: 0;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  outline: none;
+  line-height: 1;
+  white-space: pre;
+  overflow: hidden;
+}
+
+@media print {
+  /* Nothing in the app chrome should ever reach a printer. Printing goes
+     through the real PDF in a frame, not through this DOM. */
+  body {
+    display: none !important;
+  }
+}

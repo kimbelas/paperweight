@@ -1,0 +1,49 @@
+%PDF-1.7
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 8 0 R >> >> /Contents 4 0 R /Annots [5 0 R 7 0 R] >>
+endobj
+4 0 obj
+<<  /Length 105 >>
+stream
+BT /F1 12 Tf 72 700 Td (Contract with annotation signatures) Tj ET
+BT /F1 11 Tf 72 200 Td (Signed:) Tj ET
+endstream
+endobj
+5 0 obj
+<< /Type /Annot /Subtype /Stamp /Rect [130 180 310 240] /F 4 /T (Approved signature) /NM (sig-stamp-1) /AP << /N 6 0 R >> >>
+endobj
+6 0 obj
+<< /Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 180 60] /Resources << /Font << /F1 8 0 R >> >> /Length 56 >>
+stream
+BT /F1 28 Tf 0.05 0.05 0.4 rg 10 15 Td (J. Santos) Tj ET
+endstream
+endobj
+7 0 obj
+<< /Type /Annot /Subtype /Ink /Rect [350 180 520 240] /F 4 /T (Hand-drawn) /NM (sig-ink-1) /C [0 0 0.6] /BS << /W 2 >> /InkList [[360 200 380 225 400 190 420 220 440 195 460 215 480 200]] >>
+endobj
+8 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 9
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000269 00000 n 
+0000000426 00000 n 
+0000000566 00000 n 
+0000000772 00000 n 
+0000000978 00000 n 
+trailer
+<< /Size 9 /Root 1 0 R >>
+startxref
+1075
+%%EOF

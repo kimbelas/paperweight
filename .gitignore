@@ -1,0 +1,15 @@
+node_modules/
+.next/
+out/
+*.tsbuildinfo
+next-env.d.ts
+.DS_Store
+test-results/
+playwright-report/
+public/pdfium/
+fixtures/local/*
+!fixtures/local/README.md
+public/engine-worker.js
+public/engine-worker.js.map
+public/engine-worker.meta.json
+public/tesseract/
