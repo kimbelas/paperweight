@@ -127,3 +127,78 @@ test('the dialogs fit on a phone', async ({ page }) => {
     expect(box.x + box.width, 'signature canvas ends off-screen').toBeLessThanOrEqual(360);
   }
 });
+
+/**
+ * Pinch-zoom, which the viewport used to forbid.
+ *
+ * `maximumScale: 1` sat in `app/layout.tsx` from the days when the editor did
+ * not fit on a phone: the rails were fixed, the document pane was squeezed to
+ * nothing, and page zoom was the only way to see anything — so locking it
+ * looked like removing a workaround rather than removing the only way in. The
+ * suite above is the reason it is safe to drop; the two tests here are the
+ * reason it stays dropped.
+ *
+ * Both halves have to hold. The meta tag has to permit the gesture, and
+ * nothing in the document view may claim it with `touch-action` — either alone
+ * is enough to leave someone unable to enlarge the text, which is a WCAG 1.4.4
+ * failure and something Google reports as a mobile-friendliness problem.
+ */
+test('the viewport permits pinch-zoom', async ({ page }) => {
+  await page.goto('/');
+
+  // Read from the served HTML, before any script runs: this is a prerendered
+  // tag, and a viewport lock would apply to the page a crawler sees too.
+  const content = await page.locator('meta[name="viewport"]').getAttribute('content');
+  expect(content, 'no viewport meta at all').toBeTruthy();
+
+  const directives = new Map(
+    content!.split(',').map((part) => {
+      const [key, value] = part.split('=');
+      return [key!.trim().toLowerCase(), (value ?? '').trim().toLowerCase()];
+    }),
+  );
+
+  // `user-scalable=no` is the blunt way to forbid it.
+  const scalable = directives.get('user-scalable') ?? 'yes';
+  expect(scalable, 'user-scalable forbids the gesture outright').not.toMatch(/^(no|0|false)$/);
+
+  // `maximum-scale` is the quiet way: no keyword says "no zoom", the page just
+  // stops growing. WCAG 1.4.4 asks for 200%, so anything under 2 fails.
+  const max = directives.get('maximum-scale');
+  if (max !== undefined) {
+    expect(Number(max), 'maximum-scale caps the zoom below 200%').toBeGreaterThanOrEqual(2);
+  }
+});
+
+test('nothing over the document swallows the pinch', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
+  });
+  await page.goto('/');
+  await waitForLanding(page);
+  await openFixture(page, 'multipage.pdf');
+
+  // Every element from the page canvas up to <html>. A `touch-action` anywhere
+  // on that chain takes the gesture before the browser sees it, so removing
+  // the viewport lock would have achieved nothing.
+  const claimed = await page.evaluate(() => {
+    /** Whether a computed `touch-action` still leaves the browser a pinch. */
+    const permitsPinch = (value: string) =>
+      value === 'auto' || value === 'manipulation' || value.includes('pinch-zoom');
+
+    const offenders: string[] = [];
+    let node: Element | null = document.querySelector('canvas[aria-label="Page 1"]');
+    while (node) {
+      const value = getComputedStyle(node).touchAction;
+      if (!permitsPinch(value)) {
+        const id = node.tagName.toLowerCase() + (node.className ? `.${node.className}` : '');
+        offenders.push(`${id} → touch-action: ${value}`);
+      }
+      node = node.parentElement;
+    }
+    return offenders;
+  });
+
+  expect(claimed, 'touch-action on the page canvas or an ancestor of it').toEqual([]);
+});
