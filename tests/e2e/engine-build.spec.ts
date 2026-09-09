@@ -1,4 +1,5 @@
 import { expect, test } from '@playwright/test';
+import { waitForLanding } from './helpers';
 
 /**
  * The engine worker must be fetched with a URL that changes when it is
@@ -20,7 +21,7 @@ test('loads the engine worker with a cache-busting build stamp', async ({ page }
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
 
   // The worker is created when the editor mounts.
   await expect.poll(() => workerRequests.length, { timeout: 20_000 }).toBeGreaterThan(0);
@@ -38,7 +39,7 @@ test('reports which engine build is running', async ({ page }) => {
   page.on('console', (message) => messages.push(message.text()));
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
 
   // Identifying the running engine from the console is what makes a stale
   // worker diagnosable instead of mysterious.

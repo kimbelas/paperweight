@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { join } from 'node:path';
+import { waitForLanding } from './helpers';
 
 /**
  * Marks: putting a cross or a tick on a page.
@@ -31,7 +32,7 @@ async function openApp(page: Page): Promise<string[]> {
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
   return errors;
 }
 

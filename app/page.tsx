@@ -1,29 +1,30 @@
-'use client';
-
-import dynamic from 'next/dynamic';
+import EditorLoader from '@/editor/EditorLoader';
+import { structuredDataJson } from '@/structured-data';
 
 /**
- * The editor touches `window`, `Worker` and `canvas` on the way up, and the
- * PDF engine is a WebAssembly module, so there is nothing meaningful to
- * render on a server. It is loaded client-side only.
+ * The only route.
+ *
+ * A server component, so the structured data below is rendered into the static
+ * HTML and never shipped to the browser as JavaScript. It lives here rather
+ * than in the layout because it describes this page: the layout also wraps the
+ * 404, which Next marks `noindex`, and a `FAQPage` on a page nobody may index
+ * is a contradiction a validator will report.
+ *
+ * The editor itself is client-only and arrives through `EditorLoader`, whose
+ * fallback is the landing page — see `src/editor/Landing.tsx` for why that
+ * matters more than it looks.
  */
-const Editor = dynamic(() => import('@/editor/Editor'), {
-  ssr: false,
-  loading: () => (
-    <div
-      style={{
-        display: 'flex',
-        height: '100vh',
-        alignItems: 'center',
-        justifyContent: 'center',
-        color: 'var(--app-text-faint)',
-      }}
-    >
-      Starting the editor…
-    </div>
-  ),
-});
-
 export default function Page() {
-  return <Editor />;
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        // The JSON is escaped so it cannot close this element early; see
+        // `structuredDataJson`. React would escape a text child, which would
+        // corrupt the JSON, so it has to be set this way.
+        dangerouslySetInnerHTML={{ __html: structuredDataJson() }}
+      />
+      <EditorLoader />
+    </>
+  );
 }

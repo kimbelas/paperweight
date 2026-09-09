@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { join } from 'node:path';
+import { waitForLanding } from './helpers';
 
 /**
  * The pointer, and what it offers.
@@ -41,7 +42,7 @@ async function openApp(page: Page): Promise<string[]> {
   });
 
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
   return errors;
 }
 

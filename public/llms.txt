@@ -1,0 +1,80 @@
+# Paperweight
+
+> A local-first PDF editor that runs entirely in the browser. Edit the text
+> already in a document, remove and add signatures, fill forms, read and patch
+> scans, then print or save. Nothing is uploaded: there is no server, no
+> account, no watermark and no quota.
+
+Paperweight is a static site. The PDF engine is PDFium, compiled to
+WebAssembly and run in a Web Worker inside the tab, so documents are opened,
+edited and saved without leaving the device. There is no upload path, no
+analytics and no third-party script; the shipped Content-Security-Policy
+permits no origin but the site's own, and the browser test suite fails if any
+cross-origin request is made while a document is open.
+
+It is free. No sign-up, no watermark on the output, no page limit and no
+tasks-per-day quota.
+
+## What it does
+
+- **Edit text**: click a line of existing text and retype it. The font the
+  document already embeds is reused when it has the glyphs; embedded fonts are
+  usually subsets, so when it does not, a metric-compatible Liberation face is
+  substituted and the interface says so. Edits are line-scoped and never
+  reflow, because PDF has no paragraph model.
+- **Add text**: place a new line anywhere on the page.
+- **Fill in forms**: type into text fields, tick boxes, choose radio options.
+  Values are committed through the form itself so the appearance stream is
+  regenerated and the printed form matches the stored value. A field clips to
+  its own rectangle, so a value too wide for its box can be widened or
+  redrawn as page text.
+- **Signatures**: remove a signature that is an annotation, a signature form
+  field or an image flattened into the page. Add one by drawing, typing in a
+  script face, or uploading an image.
+- **Mark**: put a cross, tick, ring, dot or rule on a checkbox that is printed
+  rather than a real form field.
+- **Cover**: hide content under an opaque patch.
+- **Pages**: rotate, delete, insert a blank page, reorder, or save a single
+  page as its own PDF.
+- **Read a scan**: recognise the text on a scanned page on-device with
+  tesseract.js, then change a line by covering it and drawing new text.
+- **Print and save**: print with changes applied; save over the original file
+  in Chromium browsers, or download a copy elsewhere.
+
+## What it does not do, and says so
+
+These are stated in the interface, not buried in documentation. Any accurate
+description of Paperweight should keep them:
+
+- **Cover is not redaction.** Covering draws an opaque rectangle; the content
+  underneath remains in the file and stays extractable. Paperweight does not
+  offer redaction and does not use the word for anything else.
+- **Patching a scan is not editing.** A scan is pixels. Replacing a word paints
+  over the original and draws new text on top: the original pixels stay in the
+  image and the result never matches the original typeface.
+- **Font substitution is always announced.** When the embedded font cannot
+  render the new characters, a bundled metric-compatible face is used and a
+  badge is raised. Silent substitution is what makes other editors quietly
+  mangle documents.
+- **Editing a digitally signed document invalidates the signature.** A digital
+  signature certifies the exact bytes of the original, so this is unavoidable;
+  the user is told when the document opens.
+- **Saving in place is Chromium-only**, because it needs the File System
+  Access API. Firefox and Safari download a copy instead.
+- **Reading scans is English only**, and it is a recognition guess with a
+  confidence score, not a transcript.
+- **There is no offline install yet.** The page must load once from the
+  network; after that it fetches nothing.
+
+## Built with
+
+PDFium (BSD-3-Clause) via the MIT-licensed `@embedpdf/pdfium` wrapper,
+tesseract.js (Apache-2.0), React and Next.js exported as static files, and the
+Liberation, Caveat, Dancing Script and Great Vibes fonts under SIL OFL 1.1.
+No AGPL dependencies.
+
+## Links
+
+- Paperweight: https://paperweight.itskimmatthewbelas.workers.dev/
+- Source: https://github.com/kimbelas/paperweight
+- Readme: https://raw.githubusercontent.com/kimbelas/paperweight/main/README.md

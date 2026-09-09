@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
+import { waitForLanding } from '../e2e/helpers';
 
 /**
  * The headers the deployment ships with, and that the app still works under
@@ -134,7 +135,7 @@ test('every inline script served is allowed by hash', async ({ request }) => {
 test('the app runs under the policy with nothing blocked', async ({ page }) => {
   const report = await watch(page);
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
 
   // The engine: a same-origin module worker, a fetched WASM binary and its
   // compilation. A rendered page means all three were allowed.

@@ -4,6 +4,8 @@ A local-first PDF editor. Edit the text that is already in a document, remove
 and add signatures, print and save. Everything runs in the browser on your own
 machine: no upload, no account, no watermark, no quota.
 
+**<https://paperweight.itskimmatthewbelas.workers.dev>**
+
 **Status:** working. The editing engine is complete and tested; several UI
 conveniences are still open. See `TASKS.md`.
 
@@ -44,8 +46,8 @@ pnpm dev          # http://localhost:3000
 ```
 
 ```
-pnpm test         # 116 engine tests, driving the real PDFium WASM
-pnpm test:e2e     # 23 browser tests against the built static export
+pnpm test         # 163 engine tests, driving the real PDFium WASM
+pnpm test:e2e     # 55 browser tests against the built static export
 pnpm build        # produces out/, a folder of static files
 ```
 
@@ -83,6 +85,7 @@ needs two repository secrets: `CLOUDFLARE_API_TOKEN`, a token with the
 | `src/editor/` | React UI |
 | `src/ocr/` | Reading scans with tesseract.js |
 | `src/io/` | Files, printing and local storage |
+| `src/site.ts` | Every public-facing string: landing copy, head, structured data |
 | `fixtures/` | Hand-built PDFs pinning the structural edge cases |
 | `tests/deploy/` | Browser tests that only make sense with the deployment's headers |
 | `wrangler.jsonc` | The Cloudflare deployment, as code |
@@ -98,5 +101,5 @@ MuPDF.
 
 Both engines would fetch assets from a CDN by default. All of them — the PDF
 WASM, the OCR worker, its core and its language model — are served from
-`public/`, so the app works offline and makes no outbound requests. Two
+`public/`, so the app works offline and makes no outbound requests. Three
 browser tests hold that in place.

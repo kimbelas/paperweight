@@ -1,6 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
+import { waitForLanding } from './helpers';
 
 /**
  * The save round-trip, and screenshots of the working app.
@@ -20,7 +21,7 @@ async function openApp(page: Page): Promise<void> {
     delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
 }
 
 async function openFixture(page: Page, fixture: string): Promise<void> {

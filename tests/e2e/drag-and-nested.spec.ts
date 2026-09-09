@@ -1,5 +1,6 @@
 import { expect, test, type Page } from '@playwright/test';
 import { join } from 'node:path';
+import { waitForLanding } from './helpers';
 
 /**
  * Dragging, and editing text that lives inside a form XObject.
@@ -24,7 +25,7 @@ async function openApp(page: Page): Promise<string[]> {
     delete (window as unknown as Record<string, unknown>).showSaveFilePicker;
   });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
   return errors;
 }
 

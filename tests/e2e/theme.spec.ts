@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { waitForLanding } from './helpers';
 
 /**
  * Light by default, dark on request, remembered.
@@ -25,7 +26,7 @@ async function bodyBackground(page: Page): Promise<string> {
 test('opens light even when the system asks for dark', async ({ page }) => {
   await page.emulateMedia({ colorScheme: 'dark' });
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
 
   expect(await themeOf(page)).toBe('light');
   expect(await bodyBackground(page)).toBe('rgb(244, 244, 245)');
@@ -33,7 +34,7 @@ test('opens light even when the system asks for dark', async ({ page }) => {
 
 test('the toggle switches to dark and back', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
 
   await page.getByRole('button', { name: /switch to the dark theme/i }).click();
   expect(await themeOf(page)).toBe('dark');
@@ -47,7 +48,7 @@ test('the toggle switches to dark and back', async ({ page }) => {
 
 test('the choice survives a reload, with no flash of the wrong theme', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('heading', { name: /open a pdf to edit/i })).toBeVisible();
+  await waitForLanding(page);
   await page.getByRole('button', { name: /switch to the dark theme/i }).click();
   expect(await themeOf(page)).toBe('dark');
 

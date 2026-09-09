@@ -214,6 +214,39 @@ the decisions. `docs/research/01-editing-engines.md` and
   wrapper is MIT, the fonts are SIL OFL 1.1. Keep it that way; the licence
   files ship in `public/fonts/`.
 
+- **The landing page is prerendered, and that is the whole of the site's
+  public text.** The editor cannot be server-rendered — it wants `window`, a
+  `Worker` and a WASM module on the way up — so the static HTML is whatever
+  the dynamic import's fallback renders. That used to be the words "Starting
+  the editor…", which meant every crawler, link preview and language model
+  received a blank page while the app itself looked fine. `Landing` is
+  therefore the `loading` fallback in `EditorLoader` *and* the editor's own
+  empty state. Both, always: the fallback is what a scraper reads, and the
+  editor's copy is what survives into the rendered DOM that Google actually
+  indexes. Content that appears in the source and vanishes on mount counts for
+  nothing. `Landing` must touch no browser API and hold no state, since it is
+  rendered under Node at build time, and its button must be genuinely
+  `disabled` when it has no handler — `waitForLanding` in the browser tests
+  distinguishes the prerendered page from the mounted one by exactly that.
+
+  Every public string lives in `src/site.ts`, including the FAQ, which is
+  rendered both as visible text and as `FAQPage` structured data by
+  `src/structured-data.ts`. `tests/e2e/seo.spec.ts` compares the two, because
+  structured data that contradicts the page is worse than none.
+
+- **The share image and icons are committed files, not generated at build
+  time.** Next can build an `opengraph-image.tsx` with `next/og`, and under
+  `output: 'export'` that writes `out/opengraph-image` — no extension, because
+  a route's name is all it has once there is no server to set a content type.
+  Wrangler then serves it as `application/octet-stream`, every social scraper
+  refuses it, and nothing anywhere reports a problem: the build passes, the
+  file exists, the tag points at it, and the preview is silently blank.
+  `scripts/make-brand.mjs` (`pnpm brand`) renders the PNGs once and they are
+  committed beside `app/layout.tsx` as static metadata files, which keep their
+  extensions. `seo.spec.ts` asserts the content type under `wrangler dev`.
+  Metadata routes (`robots.ts`, `sitemap.ts`, `manifest.ts`) each need
+  `export const dynamic = 'force-static'` or the export fails outright.
+
 - **The worker URL carries a build stamp, and it is not optional.** A worker
   is fetched by plain URL and browsers cache one hard, so without a changing
   URL a rebuilt engine is silently ignored: the tab goes on running the
@@ -282,8 +315,10 @@ src/engine/    PDFium. Runs in the worker. types.ts is the wire format.
 src/editor/    React. transform.ts owns coordinate conversion.
 src/ocr/       tesseract.js, for reading scans. Never touches PDFium.
 src/io/        Files, printing and local storage, with browser fallbacks.
+src/site.ts    Every public-facing string. No imports; read by both sides.
+               structured-data.ts turns it into schema.org JSON-LD.
 scripts/       sync-wasm, sync-ocr, build-worker, write-headers,
-               make-fixtures, make-scan-fixture.
+               make-fixtures, make-scan-fixture, make-brand.
 fixtures/      Hand-built PDFs pinning the structural edge cases.
                fixtures/local/ is gitignored: real documents go there.
 tests/engine/  vitest, driving the real WASM under Node.
@@ -298,6 +333,8 @@ wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
 - `pnpm test` engine tests · `pnpm test:e2e` browser tests ·
   `pnpm test:e2e:deploy` the same under wrangler dev with the real headers
 - `pnpm typecheck` · `pnpm build`
+- `pnpm brand` regenerates the share image and icons from `app/icon.svg` and
+  `src/site.ts`. Run it by hand after changing either, and commit the PNGs.
 - After changing anything in `src/engine/`, run `pnpm build:worker` or the
   browser will keep running the previous engine.
 

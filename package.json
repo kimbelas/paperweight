@@ -1,8 +1,35 @@
 {
-  "name": "pdf-editor",
+  "name": "paperweight",
   "version": "0.1.0",
   "private": true,
   "type": "module",
+  "description": "A local-first PDF editor. Edit the text already in a document, remove and add signatures, fill forms and read scans, entirely in the browser. Nothing is uploaded.",
+  "keywords": [
+    "pdf",
+    "pdf-editor",
+    "edit-pdf",
+    "pdf-text-editing",
+    "pdfium",
+    "webassembly",
+    "local-first",
+    "privacy",
+    "ocr",
+    "tesseract",
+    "nextjs",
+    "react",
+    "signatures",
+    "pdf-forms",
+    "browser"
+  ],
+  "homepage": "https://paperweight.itskimmatthewbelas.workers.dev",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/kimbelas/paperweight.git"
+  },
+  "bugs": {
+    "url": "https://github.com/kimbelas/paperweight/issues"
+  },
+  "author": "Matt Belas",
   "scripts": {
     "predev": "node scripts/sync-wasm.mjs && node scripts/sync-ocr.mjs && node scripts/build-worker.mjs",
     "dev": "next dev",
@@ -20,6 +47,7 @@
     "sync:wasm": "node scripts/sync-wasm.mjs",
     "build:worker": "node scripts/build-worker.mjs",
     "fixtures": "node scripts/make-fixtures.mjs",
+    "brand": "node scripts/make-brand.mjs",
     "sync:ocr": "node scripts/sync-ocr.mjs",
     "headers": "node scripts/write-headers.mjs"
   },

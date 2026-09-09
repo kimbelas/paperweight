@@ -81,7 +81,9 @@ engine layer and its tests instead of being discarded.
 - [x] Merge and split in the engine (`importPages`, `extractPages`), covered by tests _(Medium, Small)_
 - [ ] Merge and split UI _(Medium, Medium)_
 - [ ] OPFS autosave via worker sync access handle; recovery prompt on launch _(Medium, Medium)_
-- [ ] PWA manifest, offline asset caching, install prompt _(Medium, Small)_
+- [x] PWA manifest, with icons and an install name _(Medium, Small)_
+- [ ] Offline asset caching and install prompt: needs a service worker, which
+      is not shipped. The FAQ says so rather than implying otherwise _(Medium, Small)_
 
 ## Phase 5 — Hardening
 
@@ -90,6 +92,19 @@ engine layer and its tests instead of being discarded.
 - [ ] Keyboard and screen-reader pass on the shell _(Low, Medium)_
 - [ ] Tauri v2 shell over the static export; test print via WebView2/WKWebView _(Low, Medium)_
 - [x] `CLAUDE.md` with the hard rules (worker is the only PDFium importer, PDF-space geometry only, no AGPL, untouched pages never regenerated) _(Medium, Small)_
+
+## Findable on the public internet (2026-09-09)
+
+- [x] `src/site.ts`: one source for every public string, shared by the page, the head, the structured data and the tests _(High, Small)_
+- [x] Prerendered landing page: `Landing` is both the loader fallback and the editor's empty state, so the copy is in the static HTML *and* survives into the rendered DOM _(High, Medium)_
+- [x] Full document head: title, description, keywords, canonical, Open Graph, Twitter card, robots, icons, manifest, theme colour _(High, Small)_
+- [x] schema.org `@graph`: WebSite, Person, SoftwareApplication, SoftwareSourceCode, FAQPage, generated from the same FAQ the page renders _(Medium, Small)_
+- [x] `robots.txt`, `sitemap.xml`, `llms.txt`; AI crawlers allowed on purpose _(Medium, Small)_
+- [x] Brand mark, share card and icons, committed rather than generated at build time, because an export writes a code-generated image with no extension _(Medium, Medium)_
+- [x] `tests/e2e/seo.spec.ts`: asserts the page with JavaScript switched off, the served files' content types, and that the copy survives hydration _(High, Medium)_
+- [x] `waitForLanding` replaces ten copies of a readiness gate that the prerendered heading would have made meaningless _(High, Small)_
+- [ ] Submit the sitemap to a search console and add the verification token _(Medium, Small)_
+- [ ] Choose a licence; the repository has none, so the metadata claims none _(Medium, Small)_
 
 ## Fixes from real-document testing (2026-09-08)
 

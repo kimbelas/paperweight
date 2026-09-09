@@ -22,6 +22,7 @@ import {
 } from '@/io/storage';
 import type { OcrLine } from '@/ocr/recognise';
 import { useOcr } from '@/ocr/useOcr';
+import { Landing } from './Landing';
 import { Notices } from './Notices';
 import { PageView } from './PageView';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -949,7 +950,9 @@ export default function Editor() {
           }}
         >
           {!info ? (
-            <DropZone loading={loading} dragOver={dragOver} onOpen={handleOpen} />
+            // The same component the static HTML was built from, so the
+            // landing copy stays in the DOM once the editor takes over.
+            <Landing loading={loading} dragOver={dragOver} onOpen={handleOpen} />
           ) : (
             <div className="flex flex-col items-center gap-6 px-6 py-6">
               {info.pages.map((page) =>
@@ -1045,58 +1048,6 @@ export default function Editor() {
       />
 
       <ShortcutsDialog open={shortcutsOpen} onClose={() => setShortcutsOpen(false)} />
-    </div>
-  );
-}
-
-function DropZone({
-  loading,
-  dragOver,
-  onOpen,
-}: {
-  loading: boolean;
-  dragOver: boolean;
-  onOpen: () => void;
-}) {
-  return (
-    <div className="grid h-full place-items-center p-8">
-      <div
-        className="w-full max-w-lg rounded-2xl px-8 py-12 text-center"
-        style={{
-          background: 'var(--app-panel)',
-          border: `2px dashed ${dragOver ? 'var(--app-accent)' : 'var(--app-border-strong)'}`,
-        }}
-      >
-        <h1 className="text-lg font-semibold">Open a PDF to edit</h1>
-        <p className="mx-auto mt-2 max-w-sm text-sm" style={{ color: 'var(--app-text-dim)' }}>
-          Drop a file here, or choose one. Change the text that is already in it, remove or add a
-          signature, then print or save.
-        </p>
-
-        <button
-          type="button"
-          onClick={onOpen}
-          disabled={loading}
-          className="focus-ring mt-6 rounded-lg px-4 py-2 text-sm font-medium"
-          style={{
-            background: 'var(--app-accent)',
-            color: '#fff',
-            border: 'none',
-            cursor: loading ? 'progress' : 'pointer',
-            opacity: loading ? 0.7 : 1,
-          }}
-        >
-          {loading ? 'Opening…' : 'Choose a PDF'}
-        </button>
-
-        <p
-          className="mx-auto mt-8 max-w-sm text-xs leading-relaxed"
-          style={{ color: 'var(--app-text-faint)' }}
-        >
-          Everything happens on this device. The file is never uploaded, there is no account, and
-          nothing is added to what you save. Scanned pages can be read here too, also on device.
-        </p>
-      </div>
     </div>
   );
 }
