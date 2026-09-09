@@ -422,7 +422,7 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'What is it built on, and is the source available?',
     answer:
-      'PDFium (BSD-3-Clause) compiled to WebAssembly and run in a Web Worker, tesseract.js (Apache-2.0) for reading scans, React and Next.js as a static export. The source is on GitHub at kimbelas/paperweight.',
+      'PDFium (BSD-3-Clause) compiled to WebAssembly and run in a Web Worker, tesseract.js (Apache-2.0) for reading scans, React and Next.js as a static export. The source is on GitHub at kimbelas/paperweight, under the MIT licence.',
   },
 ];
 
