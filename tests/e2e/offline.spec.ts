@@ -1,12 +1,12 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { join } from 'node:path';
 import { waitForLanding } from './helpers';
 
 /**
  * The app with the network switched off.
  *
- * The FAQ now says Paperweight opens and edits documents with no network after
- * one online visit, and that claim is the only reason these tests exist. An
+ * The FAQ says Paperweight opens and edits documents with no network after one
+ * online visit, and that claim is the only reason these tests exist. An
  * offline mode is uniquely easy to ship broken: the service worker registers,
  * the console says nothing, `caches` fills with something, and the failure is
  * only ever seen by somebody on a train — who cannot tell a bad cache from a
@@ -16,26 +16,105 @@ import { waitForLanding } from './helpers';
  * does, leaving the service worker in place. That is the real shape of the
  * failure: the worker is the only thing standing between a reload and a
  * dinosaur.
+ *
+ * # What WebKit can and cannot say
+ *
+ * Playwright's types state plainly that "service workers are only supported on
+ * Chromium-based browsers", and its WebKit build bears that out: `setOffline`
+ * does not reach the worker, so a precached URL fetched with the network cut
+ * throws rather than being served, and `page.reload` fails with an internal
+ * driver error. Both are the harness, not the app — probing it directly shows
+ * the worker installing, taking control, and filling both caches in WebKit
+ * exactly as it does in Chromium.
+ *
+ * So the two tests that need the network cut skip on WebKit, and the two that
+ * do not run everywhere. That keeps real WebKit coverage of installation,
+ * precaching and the warm message, and confines the skip to the one step the
+ * driver cannot perform. Real Safari has supported service workers since 11.1;
+ * verifying it there is a manual pass, which `TASKS.md` tracks alongside
+ * printing.
  */
 const FIXTURES = join(process.cwd(), 'fixtures');
+
+/** Why the two offline-serving tests cannot run under WebKit. */
+const NO_WEBKIT_OFFLINE =
+  'Playwright supports service workers on Chromium-based browsers only: in WebKit ' +
+  'setOffline does not reach the worker and reload fails inside the driver. The ' +
+  'worker itself installs and caches correctly there, which the test above asserts.';
 
 /**
  * Wait until the worker is not merely registered but in control of this page.
  *
- * The distinction is the whole test. `register()` resolves as soon as the
- * browser has accepted the script, long before the precache is filled;
- * `controller` is only set once the worker has installed, activated and
- * claimed the client — which, because `install` awaits the precache, means
- * the shell and the engine are already in `caches`. Waiting on registration
- * instead would race the download and fail somewhere unhelpful.
+ * The distinction matters. `register()` resolves as soon as the browser has
+ * accepted the script, long before the precache is filled; `controller` is
+ * only set once the worker has installed, activated and claimed the client —
+ * which, because `install` awaits the shell precache, means the shell is
+ * already in `caches`. Waiting on registration instead would race the
+ * download and fail somewhere unhelpful.
  */
-async function waitForController(page: import('@playwright/test').Page): Promise<void> {
+async function waitForController(page: Page): Promise<void> {
   await page.waitForFunction(() => navigator.serviceWorker.controller !== null, null, {
     timeout: 60_000,
   });
 }
 
-test('the landing page still renders with the network off', async ({ page, context }) => {
+/** The paths in a `paperweight-` cache whose name starts with `kind`. */
+function cachedUnder(page: Page, kind: string): Promise<string[] | null> {
+  return page.evaluate(async (prefix) => {
+    for (const name of await caches.keys()) {
+      if (!name.startsWith(prefix)) continue;
+      const cache = await caches.open(name);
+      return (await cache.keys()).map((request) => new URL(request.url).pathname).sort();
+    }
+    return null;
+  }, `paperweight-${kind}-`);
+}
+
+/**
+ * Wait for the engine to reach its cache.
+ *
+ * A poll, because the engine is warmed after the page's `load` event rather
+ * than during the install — 4.5 MB fetched while the app was still starting
+ * held every connection the browser had, and starved the editor's own chunks.
+ * Waiting for the cache to fill is therefore also the test of that warm
+ * message: nothing else sends it, and without it this list stays empty.
+ */
+async function waitForEngineCache(page: Page): Promise<void> {
+  await expect
+    .poll(() => cachedUnder(page, 'engine'), {
+      message: 'the engine never reached its cache',
+      timeout: 60_000,
+    })
+    .toEqual(['/engine-worker.js', '/pdfium/pdfium.wasm', '/pdfium/version.json']);
+}
+
+test('the worker takes control and caches the app', async ({ page }) => {
+  await page.goto('/');
+  await waitForLanding(page);
+  await waitForController(page);
+
+  // The shell is precached during the install, so by the time the worker
+  // controls the page it is complete. Asserted by content rather than by
+  // count: the entry is what an offline navigation is answered with, and the
+  // chunks are what the app is.
+  const shell = await cachedUnder(page, 'shell');
+  expect(shell, 'the shell precache').not.toBeNull();
+  expect(shell, 'the entry is cached under the URL a navigation asks for').toContain('/');
+  expect(
+    shell!.filter((path) => path.startsWith('/_next/')).length,
+    'the client bundle is cached',
+  ).toBeGreaterThan(0);
+
+  await waitForEngineCache(page);
+});
+
+test('the landing page still renders with the network off', async ({
+  page,
+  context,
+  browserName,
+}) => {
+  test.skip(browserName === 'webkit', NO_WEBKIT_OFFLINE);
+
   await page.goto('/');
   await waitForLanding(page);
   await waitForController(page);
@@ -55,7 +134,9 @@ test('the landing page still renders with the network off', async ({ page, conte
   }
 });
 
-test('a document still opens with the network off', async ({ page, context }) => {
+test('a document still opens with the network off', async ({ page, context, browserName }) => {
+  test.skip(browserName === 'webkit', NO_WEBKIT_OFFLINE);
+
   await page.addInitScript(() => {
     delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
   });
@@ -68,26 +149,7 @@ test('a document still opens with the network off', async ({ page, context }) =>
   // and PDFium is fetched on first use rather than on load, so the app has not
   // asked for the binary at all: the engine cache is the only thing that can
   // hold it.
-  //
-  // It is a poll because the engine is warmed after the page's `load` event
-  // rather than during the install — 4.5 MB fetched while the app is still
-  // starting held every connection the browser had. Waiting for the cache to
-  // fill is therefore also the test of that warm message: nothing else sends
-  // it, and without it this list stays empty.
-  await expect
-    .poll(
-      () =>
-        page.evaluate(async () => {
-          for (const name of await caches.keys()) {
-            if (!name.startsWith('paperweight-engine-')) continue;
-            const cache = await caches.open(name);
-            return (await cache.keys()).map((request) => new URL(request.url).pathname).sort();
-          }
-          return null;
-        }),
-      { message: 'the engine never reached its cache', timeout: 60_000 },
-    )
-    .toEqual(['/engine-worker.js', '/pdfium/pdfium.wasm', '/pdfium/version.json']);
+  await waitForEngineCache(page);
 
   await context.setOffline(true);
   try {

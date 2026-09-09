@@ -38,6 +38,37 @@ designed. Saving over the original file needs the File System Access API, so
 outside Chromium the app downloads a copy instead. Nested images and shapes
 cannot be moved, only nested text.
 
+## Browsers
+
+The browser suite runs in Chromium, Firefox and WebKit — every test, in each
+engine, against the built site under its real response headers. What differs
+between them is written down because the app changes its own behaviour to
+match:
+
+|                                           | Chromium | Firefox          | WebKit           |
+| ----------------------------------------- | -------- | ---------------- | ---------------- |
+| Open, edit, fill forms, read scans, print | yes      | yes              | yes              |
+| Save _over_ the original file             | yes      | downloads a copy | downloads a copy |
+| Works offline after the first visit       | yes      | yes              | not verified     |
+
+Saving in place needs the File System Access API, which only Chromium
+implements. Elsewhere the button reads **Download** and produces a copy, which
+is the one difference a user meets — and the interface says which of the two it
+is doing rather than implying the original was overwritten.
+
+Edge is not run separately. It is Chromium with the same engine and the same
+File System Access API, so it takes the same branch everywhere the code asks a
+question about the browser; a third Chromium job would spend minutes
+re-proving the first.
+
+WebKit is not Safari. It is the closest engine that can be driven in CI, and it
+does test layout, the print path and the download fallback. It does not test
+the offline mode: Playwright supports service workers on Chromium-based
+browsers only, so the two tests that cut the network skip there. What is still
+asserted in WebKit is that the worker installs, takes control and fills both
+caches — which it does, identically to Chromium. Confirming the offline path in
+Safari proper is a manual pass, and `TASKS.md` tracks it alongside printing.
+
 ## Running it
 
 ```
@@ -47,7 +78,7 @@ pnpm dev          # http://localhost:3000
 
 ```
 pnpm test         # 163 engine tests, driving the real PDFium WASM
-pnpm test:e2e     # 55 browser tests against the built static export
+pnpm test:e2e     # 69 browser tests, in each of the three engines
 pnpm build        # produces out/, a folder of static files
 ```
 

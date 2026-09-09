@@ -85,12 +85,26 @@ function contentSecurityPolicy(scriptHashes) {
     `worker-src 'self'`,
     // Printing renders the saved document in a blob: frame.
     `frame-src blob:`,
-    // No plugins, no <base> tag redirecting the worker URL, no form posts,
-    // and no other site may frame the editor.
+    // No plugins, no <base> tag redirecting the worker URL, no form posts.
     `object-src 'none'`,
     `base-uri 'none'`,
     `form-action 'none'`,
-    `frame-ancestors 'none'`,
+    // No *other* site may frame the editor. This is `'self'` rather than
+    // `'none'` because printing frames a blob: URL of the document, and a
+    // blob: frame inherits the policy of the document that created it —
+    // whereupon WebKit enforces the inherited `frame-ancestors` against the
+    // parent and refuses to load the frame. Chromium and Firefox do not, so
+    // for most of this file's life the directive looked free. It was not: on
+    // Safari it refused the print frame, from the app's own policy, and
+    // printing is the feature this app exists to reach. `'self'` still
+    // refuses every cross-origin framer, which is the clickjacking threat;
+    // the only thing it now permits is this origin framing itself, which is
+    // exactly what printing does.
+    //
+    // `X-Frame-Options: DENY` below stays as it is. It applies to the
+    // top-level HTML response, where DENY is right, and it cannot apply to a
+    // blob: frame at all, because a blob: URL has no response headers.
+    `frame-ancestors 'self'`,
   ].join('; ');
 }
 

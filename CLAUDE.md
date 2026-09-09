@@ -360,6 +360,15 @@ the decisions. `docs/research/01-editing-engines.md` and
   `context.setOffline(true)` and asserts both halves of the FAQ's claim: the
   page renders, and a document opens.
 
+  **WebKit cannot test this, and the skip is not a bug to fix.** Playwright
+  supports service workers on Chromium-based browsers only: under its WebKit
+  build `setOffline` does not reach the worker and `page.reload` fails inside
+  the driver. The worker itself is fine there — probing it shows the same
+  install, the same control and the same two caches as Chromium — so the two
+  tests that cut the network skip on WebKit and the two that do not run
+  everywhere. Real Safari has had service workers since 11.1; confirming the
+  offline path there is a manual pass that `TASKS.md` tracks.
+
 - **Editing a scan is a different operation, and the UI must keep it
   distinct.** A scan has no text objects; its words are pixels. OCR recovers
   where they are and what they probably say, and `patchRegion` paints over the
@@ -383,7 +392,7 @@ scripts/       sync-wasm, sync-ocr, build-worker, build-sw,
 fixtures/      Hand-built PDFs pinning the structural edge cases.
                fixtures/local/ is gitignored: real documents go there.
 tests/engine/  vitest, driving the real WASM under Node.
-tests/e2e/     Playwright, against the built static export.
+tests/e2e/     Playwright, against the built static export. Three engines.
 tests/deploy/  Playwright, only under wrangler dev: the response headers.
 wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
 ```
@@ -400,6 +409,10 @@ wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
   browser will keep running the previous engine.
 - After changing anything in `src/offline/`, run `pnpm build` — `build:sw`
   reads the finished `out/`, so it cannot run before the build it describes.
+- The browser suites run in Chromium, Firefox and WebKit. Add
+  `--project=webkit` to run one; CI runs the three as parallel jobs against a
+  single build, so a failure names the engine. Edge is Chromium and is not run
+  separately — the README says why, since it is a claim about this code.
 
 ### Fixture note
 
