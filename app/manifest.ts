@@ -11,11 +11,14 @@ export const dynamic = 'force-static';
  * The web app manifest.
  *
  * It makes the app installable and gives a phone or desktop launcher a real
- * name and icon instead of a URL and a screenshot of the page. That is the
- * whole of what it does here: there is no service worker, so this is not yet
- * an app that works with no network on a cold start. Claiming otherwise is
- * the kind of half-shipped offline mode that leaves someone stranded in front
- * of a blank window, so the FAQ says plainly that it is not shipped.
+ * name and icon instead of a URL and a screenshot of the page.
+ *
+ * The other half of an installed app is now here too: `src/offline/` caches
+ * the shell and the engine, so a launcher icon opens a working editor with no
+ * network rather than a blank window. That was the reason this file used to
+ * disclaim it — an app that offers to be installed and then cannot start is
+ * worse than one that does not offer — and it is why the precache holds
+ * PDFium rather than only the page.
  *
  * `theme_color` matches the toolbar rather than the page, because that is the
  * strip a mobile browser paints its own chrome against.

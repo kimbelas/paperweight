@@ -417,7 +417,7 @@ export const FAQ: { question: string; answer: string }[] = [
   {
     question: 'Does it work offline?',
     answer:
-      'The page has to load once from the network. After that nothing else is fetched: the engine, the fonts and the model that reads scans are all served from this site, so the tab keeps working if the connection drops. An installable offline mode is on the roadmap and not yet shipped.',
+      'Yes, after the first visit. The app keeps itself in your browser: the page, the interface and the PDF engine are cached on that first load, so it opens and edits documents with no network at all, and it can be installed to a home screen or launcher and used like any other app. Two things are fetched when you first need them and kept from then on: the fonts used for substituted text and typed signatures, and the model that reads scans. Everything comes from this site, so there is nothing else to fetch and nowhere else for it to go.',
   },
   {
     question: 'What is it built on, and is the source available?',
