@@ -56,6 +56,28 @@ export const LEAD = 'or drop one anywhere on this page';
 export const FINE_PRINT =
   'Your file is opened here, on this device, and is never sent anywhere. Nothing is kept between visits unless you save it yourself.';
 
+/**
+ * Ownership tokens for the search consoles.
+ *
+ * Both are the bare `content` value of the meta tag the console offers, not
+ * the whole tag. They live here because the alternative — a verification file
+ * dropped in `public/` — is an unlabelled string in a filename that nobody
+ * dares delete a year later, and because `layout.tsx` reads every other
+ * public string from this module.
+ *
+ * Empty means the tag is not emitted at all, which is the right behaviour:
+ * an empty `google-site-verification` is not a neutral tag, it is a claim of
+ * ownership that fails. Verification survives a redeploy, so once a console
+ * has checked the tag it can stay here forever; removing it later can
+ * silently unverify the property.
+ */
+export const VERIFICATION = {
+  /** Google Search Console → Add property → URL prefix → HTML tag. */
+  google: '-r4MXpkDIM-42TjGeU-koULZjvtJmi3VAL-QHRWU4Bo',
+  /** Bing Webmaster Tools → Add site → HTML meta tag (`msvalidate.01`). */
+  bing: '',
+};
+
 export const AUTHOR = { name: 'Matt Belas', url: 'https://github.com/kimbelas' };
 
 export const REPO_URL = 'https://github.com/kimbelas/paperweight';
