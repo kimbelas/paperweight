@@ -1,6 +1,8 @@
 'use client';
 
 import dynamic from 'next/dynamic';
+import { useEffect } from 'react';
+import { registerServiceWorker } from '@/offline/register';
 import { Landing } from './Landing';
 
 /**
@@ -24,6 +26,12 @@ const Editor = dynamic(() => import('./Editor'), {
 });
 
 export default function EditorLoader() {
+  // The first point in the app where a browser is certainly present. It is
+  // here rather than in the editor because the offline cache has to be
+  // installed for someone who only ever sees the landing page, and the editor
+  // is a dynamic import that arrives afterwards.
+  useEffect(() => registerServiceWorker(), []);
+
   return <Editor />;
 }
 

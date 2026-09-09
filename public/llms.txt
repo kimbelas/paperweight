@@ -63,8 +63,10 @@ description of Paperweight should keep them:
   Access API. Firefox and Safari download a copy instead.
 - **Reading scans is English only**, and it is a recognition guess with a
   confidence score, not a transcript.
-- **There is no offline install yet.** The page must load once from the
-  network; after that it fetches nothing.
+- **Offline use needs one online visit first.** The page, the interface and
+  the PDF engine are cached on that visit, after which the app opens and edits
+  with no network and can be installed to a home screen. The signature and
+  substitution fonts and the OCR model are cached when first used.
 
 ## Built with
 

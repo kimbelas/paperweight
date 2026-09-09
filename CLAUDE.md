@@ -300,6 +300,66 @@ the decisions. `docs/research/01-editing-engines.md` and
   is pinned by SHA-256 for the same reason: a build must not trust a third
   party's branch to still contain what it did.
 
+- **The offline cache is versioned per cache, not per build, and it is
+  generated after the build.** `src/offline/service-worker.ts` is bundled to
+  `out/sw.js` by `scripts/build-sw.mjs` as `postbuild`, because the app shell
+  is a set of content-hashed chunk names that do not exist until `next build`
+  has run. A worker written into `public/` beforehand could only guess at
+  them, and a precache list that guesses fails its install on a 404 — leaving
+  the app with no offline mode while every sign says it has one.
+
+  Three caches, each stamped with a hash of the bytes it is allowed to hold.
+  The single build-named cache is the obvious design and it is wrong here:
+  Next's build ID is in the chunk names, so every deploy would invalidate
+  everything and each user would re-download 4.5 MB of PDFium to receive a
+  change to a label. The shell moves with each build; the **engine** — the
+  worker and the WASM binary — moves only when PDFium does; the runtime cache
+  is stamped by the fonts and the OCR model.
+
+  **A stamp is taken from bytes that describe the asset, never from
+  provenance.** `tesseract/assets.json` carries a `syncedAt` that
+  `sync-ocr.mjs` rewrites on every prebuild, so hashing it moved the runtime
+  stamp on every build and would have discarded the 8.5 MB OCR model on every
+  deploy — while the split into separate caches went on looking as though it
+  worked. `PROVENANCE` in `build-sw.mjs` is the exclusion list, and that a
+  rebuild moves the shell stamp and nothing else is worth reading off the
+  build log whenever that script changes.
+
+  The engine is fetched when the page reports it has loaded, not during
+  `install`. A browser allows about six connections to a host, so an install
+  asking for 6 MB at once holds all of them and the page's own chunks queue
+  behind it: the app took seconds longer to become usable on a first visit,
+  and it starved an unrelated browser test until it gave up waiting.
+  `register.ts` posts a message after the `load` event, and until that lands
+  the engine is cached on first use like anything else. Engine URLs are
+  written to the engine cache wherever they were fetched from, so the two
+  paths cannot leave two copies of 5 MB.
+
+  The engine is cached ahead of use; the fonts and the OCR model are not.
+  Without the engine, "works offline" means the app opens and then cannot open
+  a document, which is the half-shipped offline mode the manifest used to
+  disclaim. The other two are 14 MB serving paths that may never be taken,
+  and `fonts.ts` says "never eagerly" about exactly those files, so they are
+  kept the first time they are actually fetched.
+
+  **Never refresh the cached shell from a live response.** The shell is a
+  matched set — HTML naming chunk files, and those files — so storing a newer
+  page beside the old build's chunks leaves the next offline start naming
+  files the cache does not hold, with everything appearing fresh. A deploy
+  changes the stamps, and a new install is what moves the shell forward.
+
+  A navigation is network-first so a deploy is picked up on the next reload;
+  everything else is cache-first, matched with `ignoreSearch`, because the
+  engine worker is requested as `engine-worker.js?v=<stamp>` and Next appends
+  a hash to its metadata files. Registration lives in the client bundle
+  (`src/offline/register.ts`), never in an inline script: `write-headers.mjs`
+  allow-lists inline scripts by hash, so an inline registration would add one
+  to the policy for nothing. The policy itself needs no change — the worker is
+  same-origin, so `worker-src 'self'` and `connect-src 'self'` already cover
+  it. `tests/e2e/offline.spec.ts` cuts the network with
+  `context.setOffline(true)` and asserts both halves of the FAQ's claim: the
+  page renders, and a document opens.
+
 - **Editing a scan is a different operation, and the UI must keep it
   distinct.** A scan has no text objects; its words are pixels. OCR recovers
   where they are and what they probably say, and `patchRegion` paints over the
@@ -315,10 +375,11 @@ src/engine/    PDFium. Runs in the worker. types.ts is the wire format.
 src/editor/    React. transform.ts owns coordinate conversion.
 src/ocr/       tesseract.js, for reading scans. Never touches PDFium.
 src/io/        Files, printing and local storage, with browser fallbacks.
+src/offline/   The service worker and its registration. Built to out/sw.js.
 src/site.ts    Every public-facing string. No imports; read by both sides.
                structured-data.ts turns it into schema.org JSON-LD.
-scripts/       sync-wasm, sync-ocr, build-worker, write-headers,
-               make-fixtures, make-scan-fixture, make-brand.
+scripts/       sync-wasm, sync-ocr, build-worker, build-sw,
+               write-headers, make-fixtures, make-scan-fixture, make-brand.
 fixtures/      Hand-built PDFs pinning the structural edge cases.
                fixtures/local/ is gitignored: real documents go there.
 tests/engine/  vitest, driving the real WASM under Node.
@@ -337,6 +398,8 @@ wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
   `src/site.ts`. Run it by hand after changing either, and commit the PNGs.
 - After changing anything in `src/engine/`, run `pnpm build:worker` or the
   browser will keep running the previous engine.
+- After changing anything in `src/offline/`, run `pnpm build` — `build:sw`
+  reads the finished `out/`, so it cannot run before the build it describes.
 
 ### Fixture note
 

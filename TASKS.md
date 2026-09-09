@@ -82,8 +82,9 @@ engine layer and its tests instead of being discarded.
 - [ ] Merge and split UI _(Medium, Medium)_
 - [ ] OPFS autosave via worker sync access handle; recovery prompt on launch _(Medium, Medium)_
 - [x] PWA manifest, with icons and an install name _(Medium, Small)_
-- [ ] Offline asset caching and install prompt: needs a service worker, which
-      is not shipped. The FAQ says so rather than implying otherwise _(Medium, Small)_
+- [x] Offline asset caching: a service worker built by `scripts/build-sw.mjs`,
+      precaching the shell and the engine, with the fonts and the OCR model kept
+      on first use. No install prompt: the browser offers its own _(Medium, Small)_
 
 ## Phase 5 — Hardening
 
