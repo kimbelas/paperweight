@@ -13,7 +13,9 @@ engine layer and its tests instead of being discarded.
 - [x] S4 Fallback font via `FPDFText_LoadFont` (Liberation Sans) → new text object → save → extractable _(High, Small)_
 - [x] S5 PNG with alpha via `FPDFImageObj_SetBitmap`; transparency survives save in 3 viewers _(High, Small)_
 - [x] S6 Print path implemented (iframe + tab fallback); verified in Chromium _(High, Small)_
-- [ ] Verify printing by hand in Firefox and Safari _(High, Small)_
+- [ ] Verify printing, and the offline mode, by hand in Firefox and Safari.
+      Playwright's WebKit is not Safari and supports no service worker, so CI
+      cannot answer either question there _(High, Small)_
 - [x] S7 `FPDF_DeviceToPage` on `/Rotate 90` and `CropBox ≠ MediaBox` fixtures _(High, Small)_
 - [ ] S8 100-page 30 MB document: open, render, snapshot timings and memory; write budgets down _(Medium, Small)_
 - [x] S9 Confirm whether `EPDF*` redaction calls are reachable from the raw module _(Medium, Small)_
@@ -89,7 +91,10 @@ engine layer and its tests instead of being discarded.
 ## Phase 5 — Hardening
 
 - [ ] Performance budgets from S8 enforced in CI on the 100-page fixture _(Medium, Medium)_
-- [ ] Cross-browser matrix: Chrome, Edge, Firefox, Safari; document the fallbacks users see _(Medium, Medium)_
+- [x] Cross-browser matrix: the whole browser suite in Chromium, Firefox and
+      WebKit as three parallel CI jobs, under the real response headers. Edge is
+      Chromium and is not run twice; the fallbacks users meet are in the README
+      _(Medium, Medium)_
 - [ ] Keyboard and screen-reader pass on the shell _(Low, Medium)_
 - [ ] Tauri v2 shell over the static export; test print via WebView2/WKWebView _(Low, Medium)_
 - [x] `CLAUDE.md` with the hard rules (worker is the only PDFium importer, PDF-space geometry only, no AGPL, untouched pages never regenerated) _(Medium, Small)_
@@ -104,7 +109,8 @@ engine layer and its tests instead of being discarded.
 - [x] Brand mark, share card and icons, committed rather than generated at build time, because an export writes a code-generated image with no extension _(Medium, Medium)_
 - [x] `tests/e2e/seo.spec.ts`: asserts the page with JavaScript switched off, the served files' content types, and that the copy survives hydration _(High, Medium)_
 - [x] `waitForLanding` replaces ten copies of a readiness gate that the prerendered heading would have made meaningless _(High, Small)_
-- [ ] Submit the sitemap to a search console and add the verification token _(Medium, Small)_
+- [x] Submit the sitemap to a search console and add the verification token.
+      Google verified and Bing done; indexing is requested by hand _(Medium, Small)_
 - [ ] Choose a licence; the repository has none, so the metadata claims none _(Medium, Small)_
 
 ## Fixes from real-document testing (2026-09-08)

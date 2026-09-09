@@ -95,7 +95,11 @@ test('the policy is the strict one', async ({ request }) => {
   expect(policy.get('object-src')).toEqual(["'none'"]);
   expect(policy.get('base-uri')).toEqual(["'none'"]);
   expect(policy.get('form-action')).toEqual(["'none'"]);
-  expect(policy.get('frame-ancestors')).toEqual(["'none'"]);
+  // `'self'`, not `'none'`: the print frame is a blob: URL of this origin,
+  // and a blob: frame inherits this policy — which WebKit then enforces
+  // against the parent. What matters is that no other origin is named, which
+  // the sweep below checks.
+  expect(policy.get('frame-ancestors')).toEqual(["'self'"]);
   expect(policy.get('connect-src')).toEqual(["'self'"]);
   expect(policy.get('worker-src')).toEqual(["'self'"]);
 

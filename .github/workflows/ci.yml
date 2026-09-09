@@ -1,11 +1,17 @@
 # Test, build, and deploy Paperweight.
 #
 # Every push to main and every pull request is typechecked, run through the
-# engine tests, built, and then run through the browser suite against
-# `wrangler dev`, which serves the build the way Cloudflare will, response
-# headers included. A push to main that passes is deployed with the exact
-# `out/` folder that was tested, not a rebuild. A pull request from this
-# repository gets a preview URL posted on it instead.
+# engine tests and built once. That one `out/` folder is then handed to three
+# parallel browser jobs — Chromium, Firefox and WebKit — each running the whole
+# browser suite against `wrangler dev`, which serves the build the way
+# Cloudflare will, response headers included. A push to main that passes every
+# engine is deployed with the exact folder that was tested, not a rebuild. A
+# pull request from this repository gets a preview URL posted on it instead.
+#
+# The matrix is three jobs rather than three projects in one, because the
+# suite runs serially by design — the engine is WebAssembly and the tests
+# render real pages — so running the engines in sequence would triple the wall
+# clock for a result that is already available in parallel.
 #
 # The deployment itself is described in wrangler.jsonc. Two repository secrets
 # are needed: CLOUDFLARE_API_TOKEN, a token with the "Workers Scripts: Edit"
@@ -32,10 +38,10 @@ env:
   WRANGLER_SEND_METRICS: 'false'
 
 jobs:
-  test:
+  build:
     name: Test and build
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7
 
@@ -52,22 +58,20 @@ jobs:
 
       - run: pnpm typecheck
 
+      - name: Formatting
+        run: pnpm format:check
+
       - name: Engine tests
         run: pnpm test
 
       - name: Build the static export
         # prebuild copies PDFium, fetches the OCR model and checks it against
         # its pinned hash; postbuild writes out/_headers with the
-        # Content-Security-Policy for this build's inline scripts.
+        # Content-Security-Policy for this build's inline scripts, then builds
+        # the service worker with a precache list taken from the finished out/.
         run: pnpm build
 
-      - name: Install Chromium for Playwright
-        run: pnpm exec playwright install --with-deps chromium
-
-      - name: Browser tests against wrangler dev
-        run: pnpm test:e2e:deploy
-
-      - name: Keep the tested build for deployment
+      - name: Keep the tested build for the browsers and the deployment
         uses: actions/upload-artifact@v7
         with:
           name: site
@@ -75,18 +79,61 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
+  browsers:
+    name: Browsers (${{ matrix.browser }})
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      # Every engine reports, rather than the first failure hiding the others.
+      # A bug that appears in WebKit and Firefox is a different bug from one
+      # that appears in WebKit alone, and that is only visible if both ran.
+      fail-fast: false
+      matrix:
+        browser: [chromium, firefox, webkit]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 10
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 26
+          cache: pnpm
+
+      # wrangler comes from the lockfile, so the tests are served by the same
+      # version that will deploy.
+      - run: pnpm install --frozen-lockfile
+
+      - name: Take the build that was tested
+        uses: actions/download-artifact@v8
+        with:
+          name: site
+          path: out
+
+      - name: Install ${{ matrix.browser }} for Playwright
+        run: pnpm exec playwright install --with-deps ${{ matrix.browser }}
+
+      - name: Browser tests against wrangler dev
+        run: pnpm test:e2e:deploy --project=${{ matrix.browser }}
+
       - name: Keep traces from failed browser tests
         if: failure()
         uses: actions/upload-artifact@v7
         with:
-          name: playwright-traces
+          # Named per engine: the artifact names have to be unique across a
+          # matrix or the upload fails, and a trace is only useful when you
+          # know which browser produced it.
+          name: playwright-traces-${{ matrix.browser }}
           path: test-results
           retention-days: 7
           if-no-files-found: ignore
 
   deploy:
     name: Deploy to Cloudflare
-    needs: test
+    needs: browsers
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -124,7 +171,7 @@ jobs:
 
   preview:
     name: Preview URL
-    needs: test
+    needs: browsers
     # Forks cannot see the secrets, so only pull requests from this repository
     # get a preview.
     if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
