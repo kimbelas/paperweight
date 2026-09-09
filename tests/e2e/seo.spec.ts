@@ -356,3 +356,36 @@ test('the landing page never scrolls sideways', async ({ page }) => {
     }
   }
 });
+
+test('the heading levels are told apart by eye, not only by tag', async ({ page }) => {
+  // The levels were correct long before they were legible: one h1, five h2,
+  // twenty-five h3, properly nested and asserted above — and set at 54px,
+  // 16px and 14px. A two-pixel step between a section heading and the entries
+  // under it is a hierarchy a parser can see and a reader cannot, which is
+  // half of the job at best. These ratios are what keep the two in step.
+  await page.goto('/');
+  await waitForLanding(page);
+
+  const size = (selector: string) =>
+    page
+      .locator(selector)
+      .first()
+      .evaluate((el) => parseFloat(getComputedStyle(el).fontSize));
+
+  const [h1, h2, h3, body] = await Promise.all([
+    size('h1'),
+    size('h2'),
+    size('#what-it-does h3'),
+    size('#answer'),
+  ]);
+
+  expect(h1, `h1 ${h1} vs h2 ${h2}`).toBeGreaterThan(h2 * 1.5);
+  expect(h2, `h2 ${h2} vs h3 ${h3}`).toBeGreaterThan(h3 * 1.4);
+  expect(h3, `h3 ${h3} vs body ${body}`).toBeLessThanOrEqual(body);
+
+  // And the same holds on a phone, where the h1 shrinks but the entries do not.
+  await page.setViewportSize({ width: 390, height: 844 });
+  const [mh1, mh2, mh3] = await Promise.all([size('h1'), size('h2'), size('#what-it-does h3')]);
+  expect(mh1, `phone h1 ${mh1} vs h2 ${mh2}`).toBeGreaterThan(mh2 * 1.4);
+  expect(mh2, `phone h2 ${mh2} vs h3 ${mh3}`).toBeGreaterThan(mh3 * 1.25);
+});
