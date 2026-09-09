@@ -328,7 +328,7 @@ test('the landing page never scrolls sideways', async ({ page }) => {
   // sideways scrollbar there is the classic way a card grid or a table breaks
   // a phone, and it is invisible at desktop width — which is where every
   // other test in this suite runs.
-  for (const width of [360, 390, 768, 1024, 1440]) {
+  for (const width of [360, 390, 768, 1024, 1280, 1440, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto('/');
     await waitForLanding(page);
