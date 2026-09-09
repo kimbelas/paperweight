@@ -8,6 +8,7 @@ import {
   SITE_URL,
   TITLE,
   TITLE_TEMPLATE,
+  VERIFICATION,
 } from '@/site';
 import './globals.css';
 
@@ -27,6 +28,16 @@ import './globals.css';
  * changed image is not served from a cache. Writing them here as well would
  * produce two of each.
  */
+/**
+ * Only the tokens that exist. An empty `google-site-verification` is not a
+ * neutral tag — it is a claim of ownership that fails — so the key is left
+ * off the metadata entirely until there is something to put in it.
+ */
+const verification: Metadata['verification'] = {
+  ...(VERIFICATION.google ? { google: VERIFICATION.google } : {}),
+  ...(VERIFICATION.bing ? { other: { 'msvalidate.01': VERIFICATION.bing } } : {}),
+};
+
 export const metadata: Metadata = {
   metadataBase: new URL(SITE_URL),
   title: { default: TITLE, template: TITLE_TEMPLATE },
@@ -38,6 +49,7 @@ export const metadata: Metadata = {
   publisher: AUTHOR.name,
   category: 'productivity',
   alternates: { canonical: '/' },
+  ...(Object.keys(verification).length > 0 ? { verification } : {}),
   openGraph: {
     type: 'website',
     url: '/',
