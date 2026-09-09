@@ -79,9 +79,27 @@ export const metadata: Metadata = {
 export const viewport: Viewport = {
   width: 'device-width',
   initialScale: 1,
-  // The editor is a fixed-layout workspace; letting it zoom fights the
-  // canvas's own zoom control.
-  maximumScale: 1,
+  // Neither `maximumScale` nor `userScalable` appears here, and their absence
+  // is the point: it is what lets the browser pinch-zoom the page.
+  //
+  // This carried `maximumScale: 1` on the reasoning that page zoom fights the
+  // canvas's own zoom control. That was written when the editor was unusable
+  // on a phone at all — two fixed rails left no document pane, so the only way
+  // to see anything was the browser's zoom, and taking it away looked like
+  // tidying up. The rails became drawers below 900px and the editor now works
+  // at 360px, so the conflict it was avoiding no longer exists.
+  //
+  // What remained was a locked viewport, which is a WCAG 1.4.4 failure — text
+  // has to reach 200% — and a Google mobile-friendly flag. The app's zoom
+  // control scales the document; pinch scales the interface, including the
+  // toolbar, the status bar and the type in the drawers. They are different
+  // needs and only one of them is anybody's to withhold.
+  //
+  // The canvas keeps no `touch-action` of its own, so the gesture reaches the
+  // browser. The one exception is the signature pad, which sets `touch-none`
+  // because a finger there has to draw rather than pan; `tests/e2e/responsive`
+  // asserts the document view sets nothing.
+  //
   // One value, not a pair keyed on `prefers-color-scheme`: the app serves
   // light and switches to dark only when the toggle says so, so a theme colour
   // that followed the operating system would disagree with the page under it.
