@@ -44,7 +44,9 @@ function LandingShell() {
       <div className="flex min-h-0 flex-1">
         <main
           className="relative min-w-0 flex-1 overflow-auto"
-          style={{ background: 'var(--app-canvas)' }}
+          // Must match what `Editor` uses with no document open, or the page
+          // would change colour the moment the editor mounted.
+          style={{ background: 'var(--app-bg)' }}
         >
           <Landing status="Starting the editor…" />
         </main>

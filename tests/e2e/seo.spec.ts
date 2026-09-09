@@ -1,13 +1,22 @@
 import { expect, test } from '@playwright/test';
 import {
+  ANSWER,
+  ARCHITECTURE,
+  ARCHITECTURE_HINT,
+  CONTENT_UPDATED,
   DESCRIPTION,
   FAQ,
+  FEATURES,
   HEADLINE,
   LIMITS,
+  NAV_LABEL,
   REPO_URL,
+  SECTIONS,
   SITE_NAME,
   SITE_URL,
+  STEPS,
   TITLE,
+  TRUST,
 } from '../../src/site';
 import { waitForLanding } from './helpers';
 
@@ -87,22 +96,64 @@ test('the page a crawler receives describes the app', async ({ browser }) => {
     // handle it. `waitForLanding` depends on exactly this.
     await expect(page.getByRole('button', { name: /choose a pdf/i })).toBeDisabled();
 
-    const sections = await page.locator('h2').allTextContents();
-    expect(sections).toEqual([
-      'What it does',
-      'How it works',
-      'Questions',
-      'Privacy',
-      'Deliberate limits',
-    ]);
+    // The paragraph under the headline is the one an answer engine lifts
+    // whole, so it has to be there, complete, before a script has run.
+    await expect(page.locator('#answer')).toHaveText(ANSWER);
 
-    expect(await page.locator('h3').allTextContents()).toEqual(FAQ.map((entry) => entry.question));
+    // Every claim above the fold arrives with the thing that backs it up. A
+    // claim quoted without its evidence is how a summarised page turns into
+    // marketing.
+    for (const claim of TRUST) {
+      await expect(page.getByText(claim.label, { exact: true })).toHaveCount(1);
+      await expect(page.getByText(claim.detail, { exact: true })).toHaveCount(1);
+    }
+
+    // Headings name the product, and each section is anchored, so a passage
+    // can be cited by fragment rather than as "somewhere on the homepage".
+    expect(await page.locator('h2').allTextContents()).toEqual(
+      SECTIONS.map((section) => section.heading),
+    );
+
+    const nav = page.getByRole('navigation', { name: NAV_LABEL });
+    for (const section of SECTIONS) {
+      await expect(page.locator(`section#${section.id}`)).toHaveCount(1);
+      await expect(nav.getByRole('link', { name: section.nav, exact: true })).toHaveAttribute(
+        'href',
+        `#${section.id}`,
+      );
+    }
+
+    // Every `h3` belongs to a section, and each section's set is exactly what
+    // `site.ts` says it is. Asserting a bare count would pass again the day
+    // the feature grid and the FAQ swap headings.
+    expect(await page.locator('#what-it-does h3').allTextContents()).toEqual(
+      FEATURES.map((feature) => feature.label),
+    );
+    expect(await page.locator('#how-it-works h3').allTextContents()).toEqual(
+      STEPS.map((step) => step.title),
+    );
+    expect(await page.locator('#questions h3').allTextContents()).toEqual(
+      FAQ.map((entry) => entry.question),
+    );
+
     for (const entry of FAQ) {
       await expect(page.getByText(entry.answer, { exact: true })).toHaveCount(1);
     }
     for (const limit of LIMITS) {
       await expect(page.getByText(limit, { exact: true })).toHaveCount(1);
     }
+
+    // The comparison is a real table. It is the one block on the page a
+    // summariser is most likely to reproduce verbatim, and a table only
+    // survives that if it is marked up as one.
+    const comparison = page.locator('#privacy table');
+    await expect(comparison).toHaveCount(1);
+    for (const row of ARCHITECTURE) {
+      await expect(comparison.getByRole('rowheader', { name: row.aspect })).toHaveCount(1);
+    }
+
+    // A description with no date reads as undated, not as unchanged.
+    await expect(page.locator(`time[datetime="${CONTENT_UPDATED}"]`)).toHaveCount(1);
 
     // The honesty rules the interface keeps must survive into the copy a
     // search engine quotes, or the summary of this app becomes a lie by
@@ -126,11 +177,45 @@ test('the page a crawler receives describes the app', async ({ browser }) => {
     expect(types).toEqual(
       expect.arrayContaining([
         'WebSite',
+        'WebPage',
         'Person',
         'SoftwareApplication',
         'SoftwareSourceCode',
+        'HowTo',
+        'ItemList',
         'FAQPage',
       ]),
+    );
+
+    const node = (type: string) =>
+      graph['@graph'].find((entry) =>
+        Array.isArray(entry['@type']) ? entry['@type'].includes(type) : entry['@type'] === type,
+      );
+
+    // The dates, and the two elements worth reading aloud. The selectors have
+    // to resolve on the page above, or they describe a page that is not this
+    // one.
+    const webPage = node('WebPage') as unknown as {
+      dateModified: string;
+      speakable: { cssSelector: string[] };
+    };
+    expect(webPage.dateModified).toBe(CONTENT_UPDATED);
+    for (const selector of webPage.speakable.cssSelector) {
+      await expect(page.locator(selector)).toHaveCount(1);
+    }
+
+    // A procedure stated as a procedure, in the page's own order and words.
+    const howTo = node('HowTo') as unknown as {
+      name: string;
+      step: { name: string; text: string }[];
+    };
+    expect(howTo.name).toBe(SECTIONS.find((section) => section.id === 'how-it-works')!.heading);
+    expect(howTo.step.map((step) => step.name)).toEqual(STEPS.map((step) => step.title));
+    expect(howTo.step.map((step) => step.text)).toEqual(STEPS.map((step) => step.text));
+
+    const list = node('ItemList') as unknown as { itemListElement: { name: string }[] };
+    expect(list.itemListElement.map((item) => item.name)).toEqual(
+      FEATURES.map((feature) => feature.label),
     );
 
     // Structured data that contradicts the visible page is worse than none.
@@ -222,8 +307,11 @@ test('the landing copy is still there once the editor mounts', async ({ page, ba
   // worth nothing.
   await expect(page.locator('h1')).toHaveCount(1);
   await expect(page.locator('h1')).toHaveText(HEADLINE);
-  await expect(page.locator('h2')).toHaveCount(5);
-  await expect(page.locator('h3')).toHaveCount(FAQ.length);
+  await expect(page.locator('#answer')).toHaveText(ANSWER);
+  await expect(page.locator('h2')).toHaveCount(SECTIONS.length);
+  await expect(page.locator('#questions h3')).toHaveCount(FAQ.length);
+  await expect(page.locator('#what-it-does h3')).toHaveCount(FEATURES.length);
+  await expect(page.locator('#privacy table')).toHaveCount(1);
   await expect(page.getByRole('link', { name: /source on github/i })).toHaveAttribute(
     'href',
     REPO_URL,
@@ -232,4 +320,39 @@ test('the landing copy is still there once the editor mounts', async ({ page, ba
   // Adding a page's worth of copy must not have added a page's worth of
   // requests to somebody else's server.
   expect(offSite, `off-site requests: ${offSite.join(', ')}`).toEqual([]);
+});
+
+test('the landing page never scrolls sideways', async ({ page }) => {
+  // The landing is a column of grids and one deliberately wide table, laid
+  // out inside the editor's own scroll pane rather than the document. A
+  // sideways scrollbar there is the classic way a card grid or a table breaks
+  // a phone, and it is invisible at desktop width — which is where every
+  // other test in this suite runs.
+  for (const width of [360, 390, 768, 1024, 1440]) {
+    await page.setViewportSize({ width, height: 900 });
+    await page.goto('/');
+    await waitForLanding(page);
+
+    const overflow = await page.evaluate(() => {
+      const root = document.documentElement;
+      const pane = document.querySelector('main')!;
+      return {
+        document: root.scrollWidth - root.clientWidth,
+        pane: pane.scrollWidth - pane.clientWidth,
+      };
+    });
+
+    expect(overflow.document, `document overflows at ${width}px`).toBe(0);
+    expect(overflow.pane, `landing pane overflows at ${width}px`).toBe(0);
+
+    // The comparison table is the one thing allowed to be wider than the
+    // screen, and only because it scrolls inside its own box. On a narrow
+    // screen the reader has to be told, or the second column simply is not
+    // there as far as they know.
+    const scroller = page.locator('#privacy table').locator('xpath=..');
+    const table = await scroller.evaluate((el) => el.scrollWidth - el.clientWidth);
+    if (table > 0) {
+      await expect(page.getByText(ARCHITECTURE_HINT, { exact: true })).toBeVisible();
+    }
+  }
 });

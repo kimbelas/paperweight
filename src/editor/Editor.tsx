@@ -928,7 +928,12 @@ export default function Editor() {
         <main
           ref={scrollRef}
           className="relative min-w-0 flex-1 overflow-auto"
-          style={{ background: 'var(--app-canvas)' }}
+          // The canvas is a darker ground so a white page reads as a sheet
+          // lying on it. With no document there is no sheet, so that ground
+          // has nothing to do and only makes the landing copy dimmer.
+          // `EditorLoader` renders the same pair, or the prerendered page
+          // would change colour the moment the editor mounted.
+          style={{ background: info ? 'var(--app-canvas)' : 'var(--app-bg)' }}
           onDragOver={(event) => {
             event.preventDefault();
             setDragOver(true);
@@ -952,7 +957,7 @@ export default function Editor() {
           {!info ? (
             // The same component the static HTML was built from, so the
             // landing copy stays in the DOM once the editor takes over.
-            <Landing loading={loading} dragOver={dragOver} onOpen={handleOpen} />
+            <Landing loading={loading} onOpen={handleOpen} />
           ) : (
             <div className="flex flex-col items-center gap-6 px-6 py-6">
               {info.pages.map((page) =>
@@ -996,16 +1001,24 @@ export default function Editor() {
             </div>
           )}
 
-          {dragOver && info && (
+          {/* The drop target is this whole pane, so this is what says so.
+              The landing page used to draw a dashed box of its own, which was
+              a smaller target than the real one and implied the drop had to
+              land inside it. */}
+          {dragOver && (
             <div
-              className="pointer-events-none absolute inset-0 grid place-items-center"
+              // Fixed rather than absolute: this pane scrolls, and an
+              // absolutely positioned overlay inside a scroller is placed
+              // against the box at scroll origin, so it slides out of sight
+              // once the landing copy has been scrolled at all.
+              className="pointer-events-none fixed inset-0 z-30 grid place-items-center"
               style={{ background: 'color-mix(in srgb, var(--app-accent) 18%, transparent)' }}
             >
               <span
                 className="rounded-lg px-4 py-2 text-sm font-medium"
                 style={{ background: 'var(--app-panel)', boxShadow: 'var(--app-shadow)' }}
               >
-                Drop to open this PDF instead
+                {info ? 'Drop to open this PDF instead' : 'Drop to open'}
               </span>
             </div>
           )}

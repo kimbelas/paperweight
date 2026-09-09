@@ -30,11 +30,31 @@ export const DESCRIPTION =
 /** The one `h1` on the page, and the headline on the share image. */
 export const HEADLINE = 'Edit PDF text, signatures and forms in your browser';
 
-export const LEAD =
-  'Drop a PDF here or choose one. Change the words already on the page, remove or add a signature, fill in a form, then print or save. The file never leaves this device.';
+/**
+ * The first paragraph, and the one that gets quoted.
+ *
+ * Written to the shape an answer engine extracts: the entity, then its
+ * category, then what separates it, in 47 words — short enough to be lifted
+ * whole, long enough to stand alone when it is. It opens the page and it is
+ * the `speakable` target in the structured data, so a summary of Paperweight
+ * written by something that never ran the editor still comes out true.
+ *
+ * `LEAD` below is not a smaller version of this. It is the instruction on the
+ * drop zone, and it tells you what to do rather than what this is.
+ */
+export const ANSWER =
+  'Paperweight is a free PDF editor that runs entirely inside your browser tab. It changes the text already on the page, removes or adds signatures, fills in forms and reads scanned pages. There is no server to upload to, no account to make, and nothing to pay.';
+
+/**
+ * The line beside the button.
+ *
+ * The whole pane takes a drop, so this says so rather than drawing a small
+ * box somewhere and implying the drop has to land inside it.
+ */
+export const LEAD = 'or drop one anywhere on this page';
 
 export const FINE_PRINT =
-  'No upload, no account, no watermark, no quota. Scanned pages can be read here too, on this device.';
+  'Your file is opened here, on this device, and is never sent anywhere. Nothing is kept between visits unless you save it yourself.';
 
 export const AUTHOR = { name: 'Matt Belas', url: 'https://github.com/kimbelas' };
 
@@ -48,6 +68,20 @@ export const REPO_URL = 'https://github.com/kimbelas/paperweight';
  * learns to ignore.
  */
 export const CONTENT_UPDATED = '2026-09-09';
+
+/** The first commit. Paired with `CONTENT_UPDATED` in the structured data. */
+export const CONTENT_PUBLISHED = '2026-09-08';
+
+/**
+ * The same date, written out, for the line a person reads in the footer.
+ *
+ * A literal rather than a formatted `Date`, because the landing page is
+ * rendered twice from the same source — once under Node at build time and
+ * once in the browser — and `toLocaleDateString` can disagree between the
+ * two. A freshness signal that changes on hydration is a hydration mismatch
+ * wearing a useful hat.
+ */
+export const CONTENT_UPDATED_LABEL = '9 September 2026';
 
 /**
  * What people actually type.
@@ -89,52 +123,85 @@ export const KEYWORDS = [
  * cover is not redaction, a patched scan is not an edit, a substituted font
  * is announced.
  */
-export const FEATURES: { label: string; text: string }[] = [
+export const FEATURES: { label: string; text: string; icon: FeatureIcon }[] = [
   {
     label: 'Edit text',
+    icon: 'edit-text',
     text: 'Click a line and retype it. The font the document already uses is reused when it has the letters; otherwise a close match is used and a badge says so.',
   },
   {
     label: 'Add text',
+    icon: 'add-text',
     text: 'Place a new line of text anywhere on the page.',
   },
   {
     label: 'Fill in forms',
+    icon: 'field',
     text: 'Click a field to type into it, tick boxes, choose options. Widen a field when a value will not fit.',
   },
   {
     label: 'Signature',
+    icon: 'signature',
     text: 'Remove a signature that is an annotation, a signature field or an image on the page. Add one by drawing, typing or uploading.',
   },
   {
     label: 'Mark',
+    icon: 'mark',
     text: 'Put a cross, tick, ring, dot or rule on a checkbox that is printed rather than a real field.',
   },
   {
     label: 'Cover',
+    icon: 'cover',
     text: 'Hide content under an opaque patch. The content stays in the file, so this is not redaction.',
   },
   {
     label: 'Image',
+    icon: 'image',
     text: 'Place a picture on the page.',
   },
   {
     label: 'Select',
+    icon: 'select',
     text: 'Move or delete text and images.',
   },
   {
     label: 'Read this page',
+    icon: 'scan',
     text: 'Recognise the text on a scanned page, on this device, then patch a line by covering it and drawing over it. A labelled patch, not an edit.',
   },
   {
     label: 'Pages',
+    icon: 'pages',
     text: 'Rotate a page, insert a blank one after it, delete it, or save it as its own PDF, from the thumbnail rail.',
   },
   {
     label: 'Print and save',
+    icon: 'print',
     text: 'Print with your changes. Save over the original in Chromium browsers; download a copy elsewhere.',
   },
 ];
+
+/**
+ * Which glyph a feature card carries.
+ *
+ * A key rather than a component, because this module must import nothing —
+ * `Landing.tsx` maps these to the icons the toolbar already uses, so the card
+ * and the button a reader will later press show the same mark. Naming the
+ * icon here rather than keying a lookup off `label` means renaming a feature
+ * cannot silently strand its icon.
+ */
+export type FeatureIcon =
+  | 'edit-text'
+  | 'add-text'
+  | 'field'
+  | 'signature'
+  | 'mark'
+  | 'cover'
+  | 'image'
+  | 'select'
+  | 'scan'
+  | 'pages'
+  | 'print';
 
 export const STEPS: { title: string; text: string }[] = [
   {
@@ -148,6 +215,134 @@ export const STEPS: { title: string; text: string }[] = [
   {
     title: 'Save or print',
     text: 'Save over the original, download a copy, or print. Only the pages you touched are rewritten; the rest of the file passes through unchanged.',
+  },
+];
+
+/**
+ * The four claims worth making early, each with the thing that backs it up.
+ *
+ * The claim is the term and the evidence is the definition, which is why this
+ * renders as a `<dl>` rather than as four boxes. "No upload" is marketing;
+ * "no upload, and the browser suite fails on any cross-origin request while a
+ * document is open" is something somebody can go and check. Each `detail` has
+ * to survive being quoted without its `label`, and neither may simply restate
+ * `ANSWER` — a page that says the same thing three times in three shapes is
+ * padding, however neatly it is arranged.
+ */
+export const TRUST: { label: string; detail: string }[] = [
+  {
+    label: 'Nothing is uploaded',
+    detail:
+      'No server, no upload path. The browser test suite fails if any cross-origin request is made while a document is open.',
+  },
+  {
+    label: 'No account',
+    detail:
+      'Nothing to sign up for. Preferences and any signatures you save stay in this browser.',
+  },
+  {
+    label: 'No watermark, no quota',
+    detail: 'Every page, every day, at full quality. There is no paid tier.',
+  },
+  {
+    label: 'Open source',
+    detail:
+      'PDFium under BSD-3-Clause, tesseract.js under Apache-2.0, the app itself on GitHub.',
+  },
+];
+
+/**
+ * The section headings, and the links that jump to them.
+ *
+ * One array so the two cannot disagree: the heading a reader sees, the `id`
+ * an answer engine cites as a fragment, and the anchor at the top of the page
+ * are all the same record. Headings name the product rather than the topic —
+ * "What Paperweight does" rather than "Features" — because a heading is one
+ * of the few places an extractor is confident about what the entity is.
+ */
+export const SECTIONS: { id: string; heading: string; nav: string; lead?: string }[] = [
+  {
+    id: 'what-it-does',
+    heading: 'What Paperweight does',
+    nav: 'What it does',
+    lead: 'Eleven tools, named here exactly as they are named on the buttons.',
+  },
+  {
+    id: 'how-it-works',
+    heading: 'How Paperweight works',
+    nav: 'How it works',
+    lead: 'Three steps, and nothing between them reaches a network.',
+  },
+  {
+    id: 'privacy',
+    heading: 'Where your file goes',
+    nav: 'Privacy',
+  },
+  {
+    id: 'questions',
+    heading: 'Questions people ask',
+    nav: 'Questions',
+    lead: 'Answered here in full, on the page, so no answer has to be expanded, clicked through or taken on trust.',
+  },
+  {
+    id: 'limits',
+    heading: 'What Paperweight will not do',
+    nav: 'Limits',
+    lead: 'Stated here rather than discovered later. Each one is a decision, not a gap waiting to be filled.',
+  },
+];
+
+export const NAV_LABEL = 'Jump to';
+
+export const NOSCRIPT =
+  'Paperweight needs JavaScript, WebAssembly and Web Workers to run. Everything below describes what it does; the editor itself will not start without them.';
+
+/**
+ * The difference stated as architecture rather than as a boast.
+ *
+ * Rendered as a table, which is the shape this comparison actually is and the
+ * shape a summariser reproduces most faithfully. It describes two ways of
+ * building a PDF editor, and deliberately names no product: the claim is
+ * about where a file ends up, which follows from the design, not about
+ * anybody's conduct, which would not.
+ */
+export const ARCHITECTURE_HEADING = 'Two ways to build a PDF editor';
+
+/**
+ * Shown only where the table does not fit.
+ *
+ * Three columns of prose cannot be read on a phone, so the table scrolls
+ * inside its own box — and a comparison whose second half is off-screen with
+ * nothing to say so reads as a one-column list of boasts.
+ */
+export const ARCHITECTURE_HINT = 'Scroll the table sideways to see both columns.';
+
+export const ARCHITECTURE_COLUMNS = {
+  aspect: 'Aspect',
+  here: 'Paperweight',
+  uploaded: 'An editor that uploads',
+};
+
+export const ARCHITECTURE: { aspect: string; here: string; uploaded: string }[] = [
+  {
+    aspect: 'Where the file is opened',
+    here: 'In this tab, by PDFium compiled to WebAssembly.',
+    uploaded: 'On a machine you do not control, once a copy has been transmitted to it.',
+  },
+  {
+    aspect: 'Who else ends up with a copy',
+    here: 'Nobody. There is no server to hold one.',
+    uploaded: 'The service and its host, for as long as their retention policy says.',
+  },
+  {
+    aspect: 'What a breach there would expose',
+    here: 'Nothing of yours. The document never left.',
+    uploaded: 'Whatever had been uploaded and not yet deleted.',
+  },
+  {
+    aspect: 'What it costs',
+    here: 'Nothing, with no account and no limit.',
+    uploaded: 'Commonly a free tier with a daily task limit, then a subscription.',
   },
 ];
 
