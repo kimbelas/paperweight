@@ -89,7 +89,12 @@ export function Toolbar({
 
   return (
     <header
-      className="flex shrink-0 items-center gap-2 px-3"
+      // `overflow-x-auto` is the backstop, not the plan. The labels below
+      // collapse to icons on a narrow screen, which is enough on any phone
+      // that can save in place; on the very narrowest, with every control
+      // shown, the toolbar scrolls itself rather than dragging the whole
+      // document sideways with it.
+      className="flex shrink-0 items-center gap-1 overflow-x-auto px-2 sm:gap-2 sm:px-3"
       style={{
         height: 52,
         background: 'var(--app-panel)',
@@ -115,12 +120,12 @@ export function Toolbar({
       <button
         type="button"
         onClick={onOpen}
-        className="focus-ring btn-quiet flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] font-medium"
+        className="focus-ring btn-quiet flex h-9 items-center gap-2 rounded-lg px-2 text-[13px] font-medium sm:px-3"
         style={outlined()}
         title="Open a PDF from this device (Ctrl+O)"
       >
         <IconOpen size={17} />
-        Open
+        <span className="hidden sm:inline">Open</span>
       </button>
 
       {hasDocument && (
@@ -192,12 +197,12 @@ export function Toolbar({
             type="button"
             onClick={onPrint}
             disabled={Boolean(busy)}
-            className="focus-ring btn-quiet flex h-9 items-center gap-2 rounded-lg px-3 text-[13px] font-medium"
+            className="focus-ring btn-quiet flex h-9 items-center gap-2 rounded-lg px-2 text-[13px] font-medium sm:px-3"
             style={outlined(!busy)}
             title="Print the document, including your changes (Ctrl+P)"
           >
             <IconPrint size={17} />
-            Print
+            <span className="hidden sm:inline">Print</span>
           </button>
 
           {canSaveInPlace ? (
@@ -206,12 +211,12 @@ export function Toolbar({
                 type="button"
                 onClick={onSave}
                 disabled={Boolean(busy)}
-                className="focus-ring btn-solid flex h-9 items-center gap-2 rounded-l-lg px-3.5 text-[13px] font-medium"
+                className="focus-ring btn-solid flex h-9 items-center gap-2 rounded-l-lg px-2.5 text-[13px] font-medium sm:px-3.5"
                 style={{ ...solid(!busy), borderRight: '1px solid rgb(255 255 255 / 0.25)' }}
                 title="Save over the file you opened (Ctrl+S)"
               >
                 <IconSave size={17} />
-                Save
+                <span className="hidden sm:inline">Save</span>
               </button>
               <button
                 type="button"
@@ -229,14 +234,14 @@ export function Toolbar({
               type="button"
               onClick={onDownload}
               disabled={Boolean(busy)}
-              className="focus-ring btn-solid flex h-9 items-center gap-2 rounded-lg px-3.5 text-[13px] font-medium"
+              className="focus-ring btn-solid flex h-9 items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium sm:px-3.5"
               style={solid(!busy)}
               // This browser cannot write back to the opened file, so the
               // label says what will actually happen.
               title="Download a copy with your changes (Ctrl+S)"
             >
               <IconDownload size={17} />
-              Download
+              <span className="hidden sm:inline">Download</span>
             </button>
           )}
 
@@ -247,6 +252,7 @@ export function Toolbar({
             name="Pages rail"
             pressed={showThumbs}
             onClick={onToggleThumbs}
+            className="order-[-1] sm:order-none"
           >
             <IconPages size={18} />
           </IconButton>
@@ -262,6 +268,7 @@ function IconButton({
   onClick,
   disabled,
   pressed,
+  className = '',
   children,
 }: {
   label: string;
@@ -270,6 +277,8 @@ function IconButton({
   onClick: () => void;
   disabled?: boolean;
   pressed?: boolean;
+  /** Only for placement — the two rail toggles group together on a phone. */
+  className?: string;
   children: React.ReactNode;
 }) {
   return (
@@ -280,7 +289,7 @@ function IconButton({
       title={label}
       aria-label={name ?? label}
       aria-pressed={pressed}
-      className="focus-ring btn-quiet grid h-9 w-9 shrink-0 place-items-center rounded-lg"
+      className={`focus-ring btn-quiet grid h-9 w-9 shrink-0 place-items-center rounded-lg ${className}`}
       style={{
         color: pressed ? 'var(--app-accent)' : 'var(--app-text-dim)',
         border: 'none',
@@ -296,7 +305,7 @@ function IconButton({
 function Divider() {
   return (
     <span
-      className="mx-0.5 h-6 w-px shrink-0"
+      className="mx-0.5 hidden h-6 w-px shrink-0 sm:inline-block"
       style={{ background: 'var(--app-border)' }}
       aria-hidden="true"
     />

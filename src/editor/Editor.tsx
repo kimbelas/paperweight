@@ -1,6 +1,13 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from 'react';
 import type { CommitResult, FormFieldInfo, PageInfo } from '@/engine/types';
 import {
   canSaveInPlace,
@@ -87,6 +94,23 @@ export default function Editor() {
   const [showTools, setShowTools] = useState(true);
   const [visible, setVisible] = useState({ from: 0, to: 4 });
 
+  /**
+   * On a narrow screen the rails open over the document rather than beside it.
+   *
+   * 248px of tools plus 178px of pages is 426px of chrome, which on a phone
+   * pushed the page itself clean off the right-hand edge: the document was
+   * still there, still rendering, still at whatever zoom fit a column of zero
+   * width, and entirely invisible. `drawer` is which rail is open, and it is
+   * deliberately separate from `showTools`/`showThumbs`, which stay the
+   * preference this browser saved on a big screen — opening a rail on a phone
+   * must not rewrite what the same browser does on a desktop.
+   */
+  const narrow = useNarrow();
+  const [drawer, setDrawer] = useState<'tools' | 'pages' | null>(null);
+
+  const toolsOpen = narrow ? drawer === 'tools' : showTools;
+  const thumbsOpen = narrow ? drawer === 'pages' : showThumbs;
+
   const handleRef = useRef<FileSystemFileHandle | null>(null);
   const scrollRef = useRef<HTMLDivElement | null>(null);
 
@@ -108,6 +132,19 @@ export default function Editor() {
   useEffect(() => {
     void saveSignatures(savedSignatures);
   }, [savedSignatures]);
+
+  // Rotating a phone to landscape, or widening a window, puts the rails back
+  // in the flow; a drawer left open over them would be a second copy.
+  useEffect(() => {
+    if (!narrow) setDrawer(null);
+  }, [narrow]);
+
+  // Picking a tool on a phone means you now want to see the page, not the
+  // list you picked it from. This also covers the tool the OCR button arms
+  // for you.
+  useEffect(() => {
+    setDrawer(null);
+  }, [tool]);
 
   useEffect(() => {
     void savePreferences({
@@ -875,6 +912,25 @@ export default function Editor() {
     );
   }
 
+  // Written once, because it is placed in two different ways: beside the
+  // document on a wide screen, and inside the drawer on a narrow one.
+  const thumbRail = info && (
+    <Thumbnails
+      engine={engine}
+      info={info}
+      currentPage={currentPage}
+      renderTokens={renderTokens}
+      actions={pageActions}
+      onSelect={(page) => {
+        setCurrentPage(page);
+        scrollRef.current
+          ?.querySelector(`[data-page="${page}"]`)
+          ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        if (narrow) setDrawer(null);
+      }}
+    />
+  );
+
   return (
     <div className="flex h-screen flex-col" style={{ background: 'var(--app-bg)' }}>
       <Toolbar
@@ -884,10 +940,18 @@ export default function Editor() {
         busy={busy}
         canSaveInPlace={inPlace && Boolean(handleRef.current)}
         pendingCount={overlay.length}
-        showTools={showTools}
-        showThumbs={showThumbs}
-        onToggleTools={() => setShowTools((v) => !v)}
-        onToggleThumbs={() => setShowThumbs((v) => !v)}
+        showTools={toolsOpen}
+        showThumbs={thumbsOpen}
+        onToggleTools={() =>
+          narrow
+            ? setDrawer((d) => (d === 'tools' ? null : 'tools'))
+            : setShowTools((v) => !v)
+        }
+        onToggleThumbs={() =>
+          narrow
+            ? setDrawer((d) => (d === 'pages' ? null : 'pages'))
+            : setShowThumbs((v) => !v)
+        }
         onOpen={handleOpen}
         onSave={() => void save(false)}
         onSaveAs={() => void save(true)}
@@ -898,8 +962,8 @@ export default function Editor() {
         onShowShortcuts={() => setShortcutsOpen(true)}
       />
 
-      <div className="flex min-h-0 flex-1">
-        {info && (
+      <div className="relative flex min-h-0 flex-1">
+        {info && !narrow && (
           // Collapsed to an icon column rather than hidden outright. The tools
           // are the reason the app is open; a toggle that took them away
           // entirely would be a toggle nobody could safely press.
@@ -1024,20 +1088,48 @@ export default function Editor() {
           )}
         </main>
 
-        {info && showThumbs && (
-          <Thumbnails
-            engine={engine}
-            info={info}
-            currentPage={currentPage}
-            renderTokens={renderTokens}
-            actions={pageActions}
-            onSelect={(page) => {
-              setCurrentPage(page);
-              scrollRef.current
-                ?.querySelector(`[data-page="${page}"]`)
-                ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-            }}
-          />
+        {info && !narrow && showThumbs && thumbRail}
+
+        {/* The same two rails, opened over the document instead of beside it.
+            Nothing here is a reduced version of the desktop rail: it is the
+            rail, at its own width, with a scrim behind it. */}
+        {info && narrow && drawer && (
+          <>
+            <button
+              type="button"
+              aria-label="Close this panel"
+              onClick={() => setDrawer(null)}
+              className="absolute inset-0 z-20"
+              style={{ background: 'rgb(0 0 0 / 0.35)' }}
+            />
+            <div
+              className={`absolute inset-y-0 z-30 flex ${drawer === 'tools' ? 'left-0' : 'right-0'}`}
+              style={{ boxShadow: 'var(--app-menu-shadow)' }}
+            >
+              {drawer === 'tools' ? (
+                <ToolRail
+                  collapsed={false}
+                  page={pageInfo}
+                  ocrLines={ocr.linesFor(currentPage)}
+                  ocrBusy={ocr.busyPage === currentPage}
+                  ocrProgress={ocr.progress}
+                  ocrError={ocr.error}
+                  onRunOcr={() => {
+                    setTool('edit-text');
+                    void ocr.run(currentPage);
+                  }}
+                  onClearOcr={() => ocr.clearPage(currentPage)}
+                  onRemoveSignature={(id) => void removeSignature(id)}
+                  onAddSignature={() => setSignatureModalOpen(true)}
+                  onAddImage={() => void addImage()}
+                  onRotate={() => pageActions.rotate(currentPage)}
+                  onDeleteSelection={selection ? () => void deleteSelection() : undefined}
+                />
+              ) : (
+                thumbRail
+              )}
+            </div>
+          </>
         )}
       </div>
 
@@ -1067,4 +1159,33 @@ export default function Editor() {
 
 function describe(error: unknown, fallback: string): string {
   return error instanceof Error && error.message ? error.message : fallback;
+}
+
+/**
+ * The width below which the rails become drawers.
+ *
+ * 900px is where the two rails — 248 of tools, 178 of pages — stop leaving a
+ * usable column for the document between them. It is a media query rather
+ * than a resize listener because the browser already knows the answer, and
+ * `useSyncExternalStore` reads it during the first render, so a phone never
+ * paints the desktop arrangement before correcting itself.
+ *
+ * `Editor` is loaded with `ssr: false`, so there is no server snapshot to
+ * disagree with; the third argument exists only because the signature
+ * requires one.
+ */
+const NARROW_QUERY = '(max-width: 899px)';
+
+function subscribeNarrow(onChange: () => void): () => void {
+  const query = window.matchMedia(NARROW_QUERY);
+  query.addEventListener('change', onChange);
+  return () => query.removeEventListener('change', onChange);
+}
+
+function useNarrow(): boolean {
+  return useSyncExternalStore(
+    subscribeNarrow,
+    () => window.matchMedia(NARROW_QUERY).matches,
+    () => false,
+  );
 }
