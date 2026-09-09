@@ -106,10 +106,41 @@ test('the policy is the strict one', async ({ request }) => {
   expect(script).not.toContain("'unsafe-eval'");
   expect(script.filter((s) => s.startsWith("'sha256-")).length).toBeGreaterThan(0);
 
-  // No directive names another origin. A host has a dot or a scheme with
-  // slashes; the allowed sources are keywords, hashes and bare schemes.
+  // No directive names another origin.
+  //
+  // The pattern below is only applied to unquoted sources, which is the fix
+  // for a flake that cost a green build for no reason. Anything inside single
+  // quotes is a keyword, a hash or a nonce and can never be a host, but a
+  // base64 SHA-256 digest is drawn from `A-Za-z0-9+/=` and so contains `/`
+  // routinely and `//` by chance — about one hash in a hundred, against
+  // seventeen hashes a build. It failed as
+  // `'sha256-+waSiv2KW1zLb5Iyn//QCkA/3mfbXZFSojP3Ycn32CI='`, which looks
+  // alarming and means nothing.
+  //
+  // Quoted sources are checked against a list instead, which is stricter than
+  // the pattern ever was: it catches `'unsafe-inline'` appearing anywhere it
+  // is not already known to be needed.
+  const KEYWORDS = ["'self'", "'none'", "'wasm-unsafe-eval'"];
+
   for (const [name, sources] of policy) {
     for (const source of sources) {
+      if (source.startsWith("'") && source.endsWith("'")) {
+        if (source.startsWith("'sha256-")) continue;
+
+        // Inline styles are set from theme tokens throughout the app, so
+        // style-src is the one directive that needs this. Anywhere else it
+        // would be a hole, and script-src in particular is what the hashes
+        // exist to avoid.
+        if (source === "'unsafe-inline'") {
+          expect(name, `${name} allows 'unsafe-inline'`).toBe('style-src');
+          continue;
+        }
+
+        expect(KEYWORDS, `${name} allows ${source}`).toContain(source);
+        continue;
+      }
+
+      // Bare schemes such as `data:` and `blob:` are fine here; a host is not.
       expect(source, `${name} allows ${source}`).not.toMatch(/\.|\/\/|^\*/);
     }
   }
