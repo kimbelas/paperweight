@@ -64,8 +64,7 @@ function stream(dict, content, compress = false) {
 const HELV = '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>';
 const HELV_BOLD =
   '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>';
-const TIMES =
-  '<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>';
+const TIMES = '<< /Type /Font /Subtype /Type1 /BaseFont /Times-Roman /Encoding /WinAnsiEncoding >>';
 
 const fixtures = {};
 
@@ -309,10 +308,7 @@ fixtures['acroform-sig-field.pdf'] = () =>
       '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
       '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
         '/Resources << /Font << /F1 7 0 R >> >> /Contents 4 0 R /Annots [5 0 R 6 0 R] >>',
-      stream(
-        '',
-        'BT /F1 12 Tf 72 700 Td (Form with a signature field) Tj ET',
-      ),
+      stream('', 'BT /F1 12 Tf 72 700 Td (Form with a signature field) Tj ET'),
       '<< /Type /Annot /Subtype /Widget /FT /Sig /T (Signature1) /Rect [72 150 300 220] ' +
         '/F 4 /DA (/Helv 0 Tf 0 g) >>',
       '<< /Type /Annot /Subtype /Widget /FT /Tx /T (FullName) /Rect [72 250 300 275] ' +

@@ -22,7 +22,13 @@ describe('moving top-level text', () => {
 
     const bytes = await withFixture('simple-text.pdf', (doc) => {
       const line = getTextLines(doc, 0).find((l) => l.text.includes('Acme'))!;
-      const result = moveObjects(doc, 0, line.runs.map((r) => r.path), 40, -25);
+      const result = moveObjects(
+        doc,
+        0,
+        line.runs.map((r) => r.path),
+        40,
+        -25,
+      );
       expect(result.moved).toBe(line.runs.length);
       expect(result.badges).toEqual([]);
       return doc.save();
@@ -43,7 +49,13 @@ describe('moving top-level text', () => {
   it('keeps the font and size when moving', async () => {
     const bytes = await withFixture('simple-text.pdf', (doc) => {
       const line = getTextLines(doc, 0).find((l) => l.text.includes('Invoice'))!;
-      moveObjects(doc, 0, line.runs.map((r) => r.path), 10, 10);
+      moveObjects(
+        doc,
+        0,
+        line.runs.map((r) => r.path),
+        10,
+        10,
+      );
       return doc.save();
     });
 
@@ -78,14 +90,28 @@ describe('moving top-level text', () => {
   it('does nothing for a delta of zero', async () => {
     await withFixture('simple-text.pdf', (doc) => {
       const line = getTextLines(doc, 0)[0];
-      expect(moveObjects(doc, 0, line.runs.map((r) => r.path), 0, 0).moved).toBe(0);
+      expect(
+        moveObjects(
+          doc,
+          0,
+          line.runs.map((r) => r.path),
+          0,
+          0,
+        ).moved,
+      ).toBe(0);
     });
   });
 
   it('leaves other lines where they were', async () => {
     const bytes = await withFixture('simple-text.pdf', (doc) => {
       const line = getTextLines(doc, 0).find((l) => l.text.includes('Acme'))!;
-      moveObjects(doc, 0, line.runs.map((r) => r.path), 60, 0);
+      moveObjects(
+        doc,
+        0,
+        line.runs.map((r) => r.path),
+        60,
+        0,
+      );
       return doc.save();
     });
 
@@ -111,7 +137,13 @@ describe('moving nested text', () => {
 
     const bytes = await withFixture('form-xobject-text.pdf', (doc) => {
       const line = getTextLines(doc, 0).find((l) => l.text.includes('inside the form'))!;
-      const result = moveObjects(doc, 0, line.runs.map((r) => r.path), 25, 40);
+      const result = moveObjects(
+        doc,
+        0,
+        line.runs.map((r) => r.path),
+        25,
+        40,
+      );
       expect(result.moved).toBe(1);
       return doc.save();
     });
@@ -133,7 +165,13 @@ describe('moving nested text', () => {
     // Substituting here would be a needless downgrade.
     const bytes = await withFixture('form-xobject-text.pdf', (doc) => {
       const line = getTextLines(doc, 0).find((l) => l.text.includes('inside the form'))!;
-      moveObjects(doc, 0, line.runs.map((r) => r.path), 5, 5);
+      moveObjects(
+        doc,
+        0,
+        line.runs.map((r) => r.path),
+        5,
+        5,
+      );
       return doc.save();
     });
 
@@ -146,12 +184,20 @@ describe('moving nested text', () => {
   it('leaves the page-level text alone', async () => {
     const bytes = await withFixture('form-xobject-text.pdf', (doc) => {
       const line = getTextLines(doc, 0).find((l) => l.text.includes('inside the form'))!;
-      moveObjects(doc, 0, line.runs.map((r) => r.path), 20, 20);
+      moveObjects(
+        doc,
+        0,
+        line.runs.map((r) => r.path),
+        20,
+        20,
+      );
       return doc.save();
     });
 
     await withBytes(bytes, (doc) => {
-      const all = getTextRuns(doc, 0).map((r) => r.text).join(' | ');
+      const all = getTextRuns(doc, 0)
+        .map((r) => r.text)
+        .join(' | ');
       expect(all).toContain('Text in the page stream');
     });
   });

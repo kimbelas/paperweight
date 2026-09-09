@@ -102,9 +102,7 @@ export async function readImageFile(
       : Object.assign(document.createElement('canvas'), { width, height });
 
   const ctx = (canvas as HTMLCanvasElement).getContext('2d') as
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D
-    | null;
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
   if (!ctx) throw new Error('That image could not be read.');
 
   ctx.drawImage(bitmap, 0, 0, width, height);

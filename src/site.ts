@@ -259,8 +259,7 @@ export const TRUST: { label: string; detail: string }[] = [
   },
   {
     label: 'No account',
-    detail:
-      'Nothing to sign up for. Preferences and any signatures you save stay in this browser.',
+    detail: 'Nothing to sign up for. Preferences and any signatures you save stay in this browser.',
   },
   {
     label: 'No watermark, no quota',
@@ -268,8 +267,7 @@ export const TRUST: { label: string; detail: string }[] = [
   },
   {
     label: 'Open source',
-    detail:
-      'PDFium under BSD-3-Clause, tesseract.js under Apache-2.0, the app itself on GitHub.',
+    detail: 'PDFium under BSD-3-Clause, tesseract.js under Apache-2.0, the app itself on GitHub.',
   },
 ];
 

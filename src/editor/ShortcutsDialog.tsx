@@ -131,7 +131,10 @@ export function ShortcutsDialog({ open, onClose }: ShortcutsDialogProps) {
               </h3>
               <dl className="m-0 grid gap-1">
                 {group.items.map(([keys, what]) => (
-                  <div key={`${keys}:${what}`} className="flex items-baseline justify-between gap-3">
+                  <div
+                    key={`${keys}:${what}`}
+                    className="flex items-baseline justify-between gap-3"
+                  >
                     <dt className="flex shrink-0 gap-1">
                       {keys.split(' ').map((k) => (
                         <kbd

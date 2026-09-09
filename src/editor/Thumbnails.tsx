@@ -241,11 +241,7 @@ function Thumb({
       title="Click to go to this page · right-click for page actions"
     >
       <span className="grid place-items-center" style={{ height: FRAME_H }}>
-        <canvas
-          ref={canvasRef}
-          className="page-sheet block"
-          style={{ width, height }}
-        />
+        <canvas ref={canvasRef} className="page-sheet block" style={{ width, height }} />
       </span>
 
       <span

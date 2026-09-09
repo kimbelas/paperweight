@@ -123,15 +123,12 @@ export function OcrPanel({
       {lines.length > 0 && !busy && (
         <>
           <p className="mb-1.5 text-xs" style={{ color: 'var(--app-text-dim)' }}>
-            Found <strong>{lines.length}</strong> {lines.length === 1 ? 'line' : 'lines'}.
-            Pick the Edit text tool and click one to change it.
+            Found <strong>{lines.length}</strong> {lines.length === 1 ? 'line' : 'lines'}. Pick the
+            Edit text tool and click one to change it.
           </p>
 
           <dl className="mb-2 grid grid-cols-2 gap-1.5 text-[11px]">
-            <div
-              className="rounded px-2 py-1"
-              style={{ background: 'var(--app-panel-2)' }}
-            >
+            <div className="rounded px-2 py-1" style={{ background: 'var(--app-panel-2)' }}>
               <dt style={{ color: 'var(--app-text-faint)' }}>Confidence</dt>
               <dd className="m-0 font-medium" style={{ color: toneColour(average) }}>
                 {average}%

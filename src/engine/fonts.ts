@@ -43,15 +43,47 @@ export const FALLBACK_FONTS: FallbackFont[] = [
   f('sans', 'LiberationSans-Regular.ttf', 'Arial, Helvetica', false, false, false, false),
   f('sans-bold', 'LiberationSans-Bold.ttf', 'Arial Bold', false, false, true, false),
   f('sans-italic', 'LiberationSans-Italic.ttf', 'Arial Italic', false, false, false, true),
-  f('sans-bolditalic', 'LiberationSans-BoldItalic.ttf', 'Arial Bold Italic', false, false, true, true),
+  f(
+    'sans-bolditalic',
+    'LiberationSans-BoldItalic.ttf',
+    'Arial Bold Italic',
+    false,
+    false,
+    true,
+    true,
+  ),
   f('serif', 'LiberationSerif-Regular.ttf', 'Times New Roman', true, false, false, false),
   f('serif-bold', 'LiberationSerif-Bold.ttf', 'Times New Roman Bold', true, false, true, false),
-  f('serif-italic', 'LiberationSerif-Italic.ttf', 'Times New Roman Italic', true, false, false, true),
-  f('serif-bolditalic', 'LiberationSerif-BoldItalic.ttf', 'Times New Roman Bold Italic', true, false, true, true),
+  f(
+    'serif-italic',
+    'LiberationSerif-Italic.ttf',
+    'Times New Roman Italic',
+    true,
+    false,
+    false,
+    true,
+  ),
+  f(
+    'serif-bolditalic',
+    'LiberationSerif-BoldItalic.ttf',
+    'Times New Roman Bold Italic',
+    true,
+    false,
+    true,
+    true,
+  ),
   f('mono', 'LiberationMono-Regular.ttf', 'Courier New', false, true, false, false),
   f('mono-bold', 'LiberationMono-Bold.ttf', 'Courier New Bold', false, true, true, false),
   f('mono-italic', 'LiberationMono-Italic.ttf', 'Courier New Italic', false, true, false, true),
-  f('mono-bolditalic', 'LiberationMono-BoldItalic.ttf', 'Courier New Bold Italic', false, true, true, true),
+  f(
+    'mono-bolditalic',
+    'LiberationMono-BoldItalic.ttf',
+    'Courier New Bold Italic',
+    false,
+    true,
+    true,
+    true,
+  ),
 ];
 
 /** Script faces offered for typed signatures. */
@@ -203,8 +235,7 @@ function parseFont(data: Uint8Array): { font: ParsedFont | null; reason?: string
     const parsed = fontkit.create(data as unknown as Buffer);
     // A .ttc/OTC collection has no glyphs of its own; take the first face.
     const font = ('fonts' in parsed ? (parsed as { fonts: unknown[] }).fonts[0] : parsed) as
-      | ParsedFont
-      | undefined;
+      ParsedFont | undefined;
     if (!font || typeof font.hasGlyphForCodePoint !== 'function') {
       return { font: null, reason: 'The embedded font is in a format we cannot inspect.' };
     }
@@ -260,11 +291,7 @@ export function checkCoverage(
 }
 
 /** Measure a string in a parsed font program, in points at `size`. */
-export function measureWithFontData(
-  data: Uint8Array,
-  text: string,
-  size: number,
-): number | null {
+export function measureWithFontData(data: Uint8Array, text: string, size: number): number | null {
   const { font } = parseFont(data);
   if (!font) return null;
   try {

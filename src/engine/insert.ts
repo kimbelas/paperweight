@@ -68,13 +68,7 @@ export function insertImage(doc: PdfDocument, placement: ImagePlacement): void {
       heap[d + 3] = data[s + 3];
     }
 
-    bitmap = mod.FPDFBitmap_CreateEx(
-      pixelWidth,
-      pixelHeight,
-      BitmapFormat.BGRA,
-      bufferPtr,
-      stride,
-    );
+    bitmap = mod.FPDFBitmap_CreateEx(pixelWidth, pixelHeight, BitmapFormat.BGRA, bufferPtr, stride);
     if (!bitmap) throw new Error('The image could not be prepared.');
 
     // Passing no pages is valid and means "do not update page caches".
@@ -214,7 +208,9 @@ export function insertPath(doc: PdfDocument, placement: PathPlacement): void {
     // Same trap as the cover rectangle: without an explicit draw mode the path
     // is built and then never painted, which looks like the tool silently
     // doing nothing. A stroked mark asks for no fill at all.
-    if (!mod.FPDFPath_SetDrawMode(obj, def.filled ? FillMode.Winding : FillMode.None, !def.filled)) {
+    if (
+      !mod.FPDFPath_SetDrawMode(obj, def.filled ? FillMode.Winding : FillMode.None, !def.filled)
+    ) {
       throw new Error('The mark could not be painted.');
     }
 
@@ -261,10 +257,7 @@ export async function insertText(doc: PdfDocument, placement: TextPlacement): Pr
 }
 
 /** Apply a batch of placements in order, so later ones paint on top. */
-export async function applyPlacements(
-  doc: PdfDocument,
-  placements: Placement[],
-): Promise<void> {
+export async function applyPlacements(doc: PdfDocument, placements: Placement[]): Promise<void> {
   for (const placement of placements) {
     switch (placement.type) {
       case 'image':

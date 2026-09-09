@@ -54,12 +54,7 @@ export function useOcr(engine: Engine): UseOcr {
 
         // The bitmap is treated as a device of its own size, so the engine's
         // mapping converts recognised boxes straight into page space.
-        const transform = await measureTransform(
-          engine,
-          page,
-          rendered.width,
-          rendered.height,
-        );
+        const transform = await measureTransform(engine, page, rendered.width, rendered.height);
 
         const lines = await recognisePage(
           {
@@ -84,10 +79,7 @@ export function useOcr(engine: Engine): UseOcr {
           ...s,
           busyPage: null,
           progress: null,
-          error:
-            error instanceof Error
-              ? error.message
-              : 'The page could not be read.',
+          error: error instanceof Error ? error.message : 'The page could not be read.',
         }));
         return [];
       }

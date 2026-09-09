@@ -119,9 +119,7 @@ test('edits a field value and repaints the page', async ({ page }) => {
   await expect(input).toHaveCount(0);
 
   await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 40_000 });
-  await expect
-    .poll(() => inkIn(page, SURNAME_RECT), { timeout: 30_000 })
-    .not.toBe(before);
+  await expect.poll(() => inkIn(page, SURNAME_RECT), { timeout: 30_000 }).not.toBe(before);
 
   // And the stored value is the new one, not just the drawn pixels.
   await clickPdf(page, SURNAME_VALUE.x, SURNAME_VALUE.y);
@@ -386,9 +384,7 @@ test('an edited field with no appearance of its own matches the rest of the form
 
   // The edited field must now sit at the same type size as its neighbour, not
   // at the auto size that filled the box.
-  await expect
-    .poll(() => inkHeight(666, 638), { timeout: 30_000 })
-    .toBeLessThan(reference * 1.6);
+  await expect.poll(() => inkHeight(666, 638), { timeout: 30_000 }).toBeLessThan(reference * 1.6);
 
   // And the whole value is there, since it is no longer too wide to fit.
   await clickPdf(page, 320, 652);

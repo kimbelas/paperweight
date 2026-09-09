@@ -92,7 +92,9 @@ function shareCard(mark) {
       h('img', { src: mark, width: 88, height: 88 }),
       h(
         'div',
-        { style: { display: 'flex', fontSize: 60, fontWeight: 700, color: INK, letterSpacing: -1 } },
+        {
+          style: { display: 'flex', fontSize: 60, fontWeight: 700, color: INK, letterSpacing: -1 },
+        },
         SITE_NAME,
       ),
     ),
@@ -101,7 +103,16 @@ function shareCard(mark) {
       { style: { display: 'flex', flexDirection: 'column', gap: 22 } },
       h(
         'div',
-        { style: { display: 'flex', fontSize: 52, fontWeight: 700, color: INK, lineHeight: 1.15, letterSpacing: -1 } },
+        {
+          style: {
+            display: 'flex',
+            fontSize: 52,
+            fontWeight: 700,
+            color: INK,
+            lineHeight: 1.15,
+            letterSpacing: -1,
+          },
+        },
         HEADLINE,
       ),
       h(
@@ -110,11 +121,7 @@ function shareCard(mark) {
         'Free · No upload · No account · No watermark · No quota',
       ),
     ),
-    h(
-      'div',
-      { style: { display: 'flex', fontSize: 24, color: FAINT } },
-      new URL(SITE_URL).host,
-    ),
+    h('div', { style: { display: 'flex', fontSize: 24, color: FAINT } }, new URL(SITE_URL).host),
   );
 }
 
@@ -149,7 +156,9 @@ async function write(relative, element, options) {
   const target = join(root, relative);
   await mkdir(dirname(target), { recursive: true });
   await writeFile(target, bytes);
-  console.log(`${relative} — ${options.width}x${options.height}, ${(bytes.length / 1024).toFixed(1)} kB`);
+  console.log(
+    `${relative} — ${options.width}x${options.height}, ${(bytes.length / 1024).toFixed(1)} kB`,
+  );
 }
 
 await main();

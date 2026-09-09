@@ -281,14 +281,7 @@ export interface PathPlacement {
 
 /** What kind of form field something is, in words the interface can use. */
 export type FormFieldKind =
-  | 'text'
-  | 'choice'
-  | 'list'
-  | 'checkbox'
-  | 'radio'
-  | 'button'
-  | 'signature'
-  | 'unknown';
+  'text' | 'choice' | 'list' | 'checkbox' | 'radio' | 'button' | 'signature' | 'unknown';
 
 /**
  * A field of an interactive form.

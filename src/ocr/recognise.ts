@@ -265,16 +265,10 @@ function toCanvas(input: RecogniseInput): HTMLCanvasElement | OffscreenCanvas {
       : Object.assign(document.createElement('canvas'), { width, height });
 
   const ctx = (canvas as HTMLCanvasElement).getContext('2d') as
-    | CanvasRenderingContext2D
-    | OffscreenCanvasRenderingContext2D
-    | null;
+    CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null;
   if (!ctx) throw new Error('This browser could not prepare the page for recognition.');
 
-  ctx.putImageData(
-    new ImageData(data as Uint8ClampedArray<ArrayBuffer>, width, height),
-    0,
-    0,
-  );
+  ctx.putImageData(new ImageData(data as Uint8ClampedArray<ArrayBuffer>, width, height), 0, 0);
   return canvas;
 }
 

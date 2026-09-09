@@ -183,7 +183,10 @@ test('finds and removes a flattened signature', async ({ page }) => {
   await expect(page.getByText('Signature image')).toBeVisible();
   await expect(page.getByText(/Next to the text/i)).toBeVisible();
 
-  await page.getByRole('button', { name: /remove from the file/i }).first().click();
+  await page
+    .getByRole('button', { name: /remove from the file/i })
+    .first()
+    .click();
 
   // Once removed it leaves the list, because the scan is redone after an edit.
   await expect(page.getByText('Signature image')).toHaveCount(0, { timeout: 20_000 });
@@ -260,7 +263,9 @@ test('reports a file that is not a PDF', async ({ page }) => {
 
   const chooser = page.waitForEvent('filechooser');
   await page.getByRole('button', { name: /choose a pdf/i }).click();
-  await (await chooser).setFiles({
+  await (
+    await chooser
+  ).setFiles({
     name: 'notes.pdf',
     mimeType: 'application/pdf',
     buffer: Buffer.from('this is definitely not a pdf'),

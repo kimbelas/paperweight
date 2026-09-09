@@ -480,9 +480,7 @@ function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
 function median(values: number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 === 0
-    ? (sorted[middle - 1] + sorted[middle]) / 2
-    : sorted[middle];
+  return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
 /**
@@ -712,11 +710,7 @@ export async function convertFieldToText(
  * happened to press, so a press near a border cannot miss the widget PDFium
  * is about to focus.
  */
-export function setFormFieldText(
-  doc: PdfDocument,
-  field: FormFieldInfo,
-  text: string,
-): void {
+export function setFormFieldText(doc: PdfDocument, field: FormFieldInfo, text: string): void {
   const { mod } = doc;
   const form = doc.form;
   if (!form) throw new Error('This document has no interactive form.');

@@ -144,18 +144,7 @@ export function pageToDevice(
   return withScope(mod, (scope) => {
     const outX = scope.allocInt();
     const outY = scope.allocInt();
-    const ok = mod.FPDF_PageToDevice(
-      page,
-      0,
-      0,
-      deviceWidth,
-      deviceHeight,
-      0,
-      x,
-      y,
-      outX,
-      outY,
-    );
+    const ok = mod.FPDF_PageToDevice(page, 0, 0, deviceWidth, deviceHeight, 0, x, y, outX, outY);
     if (!ok) throw new Error('Could not map that point onto the view.');
     return {
       x: mod.pdfium.getValue(outX, 'i32'),

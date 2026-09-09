@@ -50,8 +50,14 @@ const copies = [
   // The worker script tesseract.js spawns.
   [resolveIn('tesseract.js', 'dist/worker.min.js'), 'worker.min.js'],
   // The recognition core: Emscripten glue plus its WASM.
-  [resolveIn('tesseract.js-core', 'tesseract-core-simd-lstm.wasm.js'), 'tesseract-core-simd-lstm.wasm.js'],
-  [resolveIn('tesseract.js-core', 'tesseract-core-simd-lstm.wasm'), 'tesseract-core-simd-lstm.wasm'],
+  [
+    resolveIn('tesseract.js-core', 'tesseract-core-simd-lstm.wasm.js'),
+    'tesseract-core-simd-lstm.wasm.js',
+  ],
+  [
+    resolveIn('tesseract.js-core', 'tesseract-core-simd-lstm.wasm'),
+    'tesseract-core-simd-lstm.wasm',
+  ],
   // Licence, because these are redistributed assets.
   [resolveIn('tesseract.js-core', 'LICENSE'), 'LICENSE-tesseract-core.txt'],
 ];
@@ -134,9 +140,7 @@ await writeFile(
   join(outDir, 'assets.json'),
   JSON.stringify(
     {
-      tesseractJs: JSON.parse(
-        await readFile(join(tesseractDir, 'package.json'), 'utf8'),
-      ).version,
+      tesseractJs: JSON.parse(await readFile(join(tesseractDir, 'package.json'), 'utf8')).version,
       core: 'tesseract-core-simd-lstm',
       language: 'eng (tessdata_fast 4.0.0)',
       languageSha256: MODEL_SHA256,

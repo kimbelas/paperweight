@@ -14,13 +14,29 @@ import {
   setFormFieldWidth,
   toggleFormField,
 } from './forms';
-import { applyPlacements, patchTextRegion, sampleBackgroundColour, type PatchRegionRequest } from './insert';
+import {
+  applyPlacements,
+  patchTextRegion,
+  sampleBackgroundColour,
+  type PatchRegionRequest,
+} from './insert';
 import { moveObjects } from './move';
 import { getModule } from './module';
 import { deletePages, extractPages, insertBlankPage, movePages, rotatePage } from './pages';
 import { hitTestObject, listPageObjects } from './objects';
-import { deviceRectToPage, deviceToPage, pageToDevice, renderPage, type RenderOptions } from './render';
-import { removeSignature, scanForSignatures, scanPageForSignatures, type SignatureScan } from './signatures';
+import {
+  deviceRectToPage,
+  deviceToPage,
+  pageToDevice,
+  renderPage,
+  type RenderOptions,
+} from './render';
+import {
+  removeSignature,
+  scanForSignatures,
+  scanPageForSignatures,
+  type SignatureScan,
+} from './signatures';
 import { getGlyphs, getTextLines, hitTestLine } from './text';
 import { removeObjectsByPath, replaceLineText } from './text-edit';
 import type { FieldConversion } from './forms';
@@ -346,11 +362,7 @@ export class EditorSession {
    * in the file and prints truncated. Saying nothing would let someone submit
    * a form believing it says something it does not.
    */
-  private async fitBadges(
-    doc: PdfDocument,
-    field: FormFieldInfo,
-    value: string,
-  ): Promise<Badge[]> {
+  private async fitBadges(doc: PdfDocument, field: FormFieldInfo, value: string): Promise<Badge[]> {
     const fit = await measureFieldFit(doc, field, value);
     if (fit.fits) return [];
 
@@ -445,24 +457,36 @@ export class EditorSession {
   }
 
   deletePages(indices: number[]): CommitResult {
-    return this.commitSync('Delete pages', (doc) => {
-      deletePages(doc, indices);
-      return [];
-    }, true);
+    return this.commitSync(
+      'Delete pages',
+      (doc) => {
+        deletePages(doc, indices);
+        return [];
+      },
+      true,
+    );
   }
 
   movePages(indices: number[], destination: number): CommitResult {
-    return this.commitSync('Reorder pages', (doc) => {
-      movePages(doc, indices, destination);
-      return [];
-    }, true);
+    return this.commitSync(
+      'Reorder pages',
+      (doc) => {
+        movePages(doc, indices, destination);
+        return [];
+      },
+      true,
+    );
   }
 
   insertBlankPage(atIndex: number): CommitResult {
-    return this.commitSync('Insert page', (doc) => {
-      insertBlankPage(doc, atIndex);
-      return [];
-    }, true);
+    return this.commitSync(
+      'Insert page',
+      (doc) => {
+        insertBlankPage(doc, atIndex);
+        return [];
+      },
+      true,
+    );
   }
 
   /** Build a new PDF from selected pages, for split or export. */

@@ -43,9 +43,7 @@ export function OverlayLayer({ items, transform, zoom }: OverlayLayerProps) {
   );
 }
 
-type DragMode =
-  | { kind: 'move' }
-  | { kind: 'resize'; corner: 'nw' | 'ne' | 'se' | 'sw' };
+type DragMode = { kind: 'move' } | { kind: 'resize'; corner: 'nw' | 'ne' | 'se' | 'sw' };
 
 function OverlayBox({
   item,
@@ -228,7 +226,11 @@ function OverlayBox({
       )}
 
       {item.kind === 'text' && (
-        <OverlayTextInput item={item} zoom={zoom} onChange={(text) => updateOverlay(item.id, { text })} />
+        <OverlayTextInput
+          item={item}
+          zoom={zoom}
+          onChange={(text) => updateOverlay(item.id, { text })}
+        />
       )}
 
       {selected && (

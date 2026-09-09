@@ -380,8 +380,7 @@ export class PdfDocument {
     // objects at all. Requiring the image to cover most of the page keeps
     // full-page background graphics with real text over them out of this.
     const pageArea = width * height;
-    const isScanned =
-      textObjectCount === 0 && imageCount > 0 && largestImageArea > pageArea * 0.6;
+    const isScanned = textObjectCount === 0 && imageCount > 0 && largestImageArea > pageArea * 0.6;
 
     return {
       index,

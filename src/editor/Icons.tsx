@@ -14,11 +14,7 @@ interface IconProps {
   className?: string;
 }
 
-function Svg({
-  size = 16,
-  className,
-  children,
-}: IconProps & { children: React.ReactNode }) {
+function Svg({ size = 16, className, children }: IconProps & { children: React.ReactNode }) {
   return (
     <svg
       width={size}
@@ -219,7 +215,10 @@ export const IconShape = (p: IconProps) => (
 export const IconCopy = (p: IconProps) => (
   <Svg {...p}>
     <rect x="9" y="9" width="11" height="12" rx="1.5" />
-    <path d="M15 6V4.5A1.5 1.5 0 0013.5 3H5.5A1.5 1.5 0 004 4.5v9A1.5 1.5 0 005.5 15H6" opacity="0.6" />
+    <path
+      d="M15 6V4.5A1.5 1.5 0 0013.5 3H5.5A1.5 1.5 0 004 4.5v9A1.5 1.5 0 005.5 15H6"
+      opacity="0.6"
+    />
   </Svg>
 );
 

@@ -203,12 +203,10 @@ test('the app runs under the policy with nothing blocked', async ({ page }) => {
     });
 
     // font-src — a signature face, loaded the way SignatureModal does.
-    const font = await new FontFace('CspProbe', 'url(/fonts/Caveat-Variable.ttf)')
-      .load()
-      .then(
-        () => 'loaded',
-        (error: unknown) => `blocked: ${String(error)}`,
-      );
+    const font = await new FontFace('CspProbe', 'url(/fonts/Caveat-Variable.ttf)').load().then(
+      () => 'loaded',
+      (error: unknown) => `blocked: ${String(error)}`,
+    );
 
     // frame-src blob: — the print frame. A blocked frame still fires `load`,
     // so the verdict for this one is the violation report checked below.

@@ -40,14 +40,20 @@ async function openFixture(page: Page, fixture: string): Promise<void> {
 /** Click a point given in PDF coordinates on a 612x792 page. */
 async function clickPdfPoint(page: Page, pdfX: number, pdfY: number): Promise<void> {
   const box = (await page.locator('canvas[aria-label="Page 1"]').boundingBox())!;
-  await page.mouse.click(box.x + pdfX * (box.width / 612), box.y + (792 - pdfY) * (box.height / 792));
+  await page.mouse.click(
+    box.x + pdfX * (box.width / 612),
+    box.y + (792 - pdfY) * (box.height / 792),
+  );
 }
 
 test('selects a whole line of text, not one word of it', async ({ page }) => {
   await openApp(page);
   await openFixture(page, 'kerned-tj.pdf');
 
-  await page.getByRole('button', { name: /select/i }).first().click();
+  await page
+    .getByRole('button', { name: /select/i })
+    .first()
+    .click();
   // "Waterfall Project" is emitted as many kerned text objects. Selecting one
   // of them and dragging it would pull letters out of the middle of a word.
   await clickPdfPoint(page, 100, 704);
@@ -61,7 +67,10 @@ test('drags a line of text to a new position', async ({ page }) => {
   const errors = await openApp(page);
   await openFixture(page, 'simple-text.pdf');
 
-  await page.getByRole('button', { name: /select/i }).first().click();
+  await page
+    .getByRole('button', { name: /select/i })
+    .first()
+    .click();
   await clickPdfPoint(page, 100, 664);
 
   const outline = page.locator('[role="group"][aria-label^="Selected:"]');
@@ -108,7 +117,10 @@ test('a click that barely wobbles does not move anything', async ({ page }) => {
   await openApp(page);
   await openFixture(page, 'simple-text.pdf');
 
-  await page.getByRole('button', { name: /select/i }).first().click();
+  await page
+    .getByRole('button', { name: /select/i })
+    .first()
+    .click();
   await clickPdfPoint(page, 100, 664);
 
   const outline = page.locator('[role="group"][aria-label^="Selected:"]');

@@ -22,14 +22,7 @@ import type {
  * would mean a content-stream regeneration and a re-render per mouse move.
  */
 
-export type Tool =
-  | 'select'
-  | 'edit-text'
-  | 'add-text'
-  | 'mark'
-  | 'signature'
-  | 'image'
-  | 'cover';
+export type Tool = 'select' | 'edit-text' | 'add-text' | 'mark' | 'signature' | 'image' | 'cover';
 
 /** An addition the user has placed but not yet written into the document. */
 export interface OverlayItem {
@@ -123,7 +116,12 @@ interface EditorState {
 
   // Feedback
   notices: Notice[];
-  history: { canUndo: boolean; canRedo: boolean; undoLabel: string | null; redoLabel: string | null };
+  history: {
+    canUndo: boolean;
+    canRedo: boolean;
+    undoLabel: string | null;
+    redoLabel: string | null;
+  };
 
   // Actions
   setDocument(fileName: string, info: DocumentInfo): void;
@@ -239,8 +237,7 @@ export const useEditor = create<EditorState>((set) => ({
   markDirty: () => set({ dirty: true }),
   markClean: () => set({ dirty: false }),
 
-  setZoom: (zoom, fitMode = 'custom') =>
-    set({ zoom: Math.min(8, Math.max(0.1, zoom)), fitMode }),
+  setZoom: (zoom, fitMode = 'custom') => set({ zoom: Math.min(8, Math.max(0.1, zoom)), fitMode }),
   setFitMode: (fitMode) => set({ fitMode }),
   setCurrentPage: (currentPage) => set({ currentPage }),
 

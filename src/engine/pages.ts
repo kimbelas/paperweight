@@ -134,16 +134,13 @@ export function extractPages(doc: PdfDocument, indices: number[]): Uint8Array {
     // that is not wrapped in PdfDocument because it exists only for this call.
     const chunks: Uint8Array[] = [];
     let total = 0;
-    const callback = mod.pdfium.addFunction(
-      (_self: number, dataPtr: number, size: number) => {
-        const chunk = new Uint8Array(size);
-        chunk.set(mod.pdfium.HEAPU8.subarray(dataPtr, dataPtr + size));
-        chunks.push(chunk);
-        total += size;
-        return 1;
-      },
-      'iiii',
-    );
+    const callback = mod.pdfium.addFunction((_self: number, dataPtr: number, size: number) => {
+      const chunk = new Uint8Array(size);
+      chunk.set(mod.pdfium.HEAPU8.subarray(dataPtr, dataPtr + size));
+      chunks.push(chunk);
+      total += size;
+      return 1;
+    }, 'iiii');
 
     try {
       const saved = withScope(mod, (scope) => {

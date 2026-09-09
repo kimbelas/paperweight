@@ -112,11 +112,7 @@ export function scanPageForSignatures(doc: PdfDocument, pageIndex: number): Sign
     // Ink is nearly always a signature in a document like this. Stamps and
     // free text need corroboration, or every sticky note becomes a candidate.
     const confidence: SignatureCandidate['confidence'] =
-      annot.subtype === AnnotSubtype.Ink || named
-        ? 'high'
-        : shaped
-          ? 'medium'
-          : 'low';
+      annot.subtype === AnnotSubtype.Ink || named ? 'high' : shaped ? 'medium' : 'low';
 
     candidates.push({
       id: `p${pageIndex}-annot${annot.index}`,
@@ -267,10 +263,7 @@ function isSignatureAspect(bounds: Rect): boolean {
 }
 
 /** Look for signature wording near a rectangle. */
-function findNearbyLabel(
-  bounds: Rect,
-  runs: { text: string; bounds: Rect }[],
-): string | null {
+function findNearbyLabel(bounds: Rect, runs: { text: string; bounds: Rect }[]): string | null {
   for (const run of runs) {
     if (!LABEL_PATTERN.test(run.text)) continue;
 

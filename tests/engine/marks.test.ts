@@ -28,9 +28,10 @@ describe('mark geometry', () => {
   it('every mark stays inside its unit box', () => {
     for (const shape of MARK_ORDER) {
       for (const subpath of MARKS[shape].subpaths) {
-        const points = [subpath.from, ...subpath.segments.flatMap((s) =>
-          'c1' in s ? [s.c1, s.c2, s.to] : [s.to],
-        )];
+        const points = [
+          subpath.from,
+          ...subpath.segments.flatMap((s) => ('c1' in s ? [s.c1, s.c2, s.to] : [s.to])),
+        ];
         for (const [x, y] of points) {
           expect(x, `${shape} x`).toBeGreaterThanOrEqual(0);
           expect(x, `${shape} x`).toBeLessThanOrEqual(1);
@@ -60,8 +61,9 @@ describe('mark geometry', () => {
 describe('drawing a mark onto a page', () => {
   /** Path objects the fixture already has, so a mark is counted as a delta. */
   async function basePathCount(): Promise<number> {
-    return withFixture('simple-text.pdf', (doc) =>
-      listPageObjects(doc, 0).filter((o) => o.type === ObjType.Path).length,
+    return withFixture(
+      'simple-text.pdf',
+      (doc) => listPageObjects(doc, 0).filter((o) => o.type === ObjType.Path).length,
     );
   }
 
