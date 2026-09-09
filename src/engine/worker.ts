@@ -84,8 +84,7 @@ const api = {
   measureFormField: (pageIndex: number, name: string, value: string) =>
     session.measureFormField(pageIndex, name, value),
   removeSignatureById: (id: string) => session.removeSignatureById(id),
-  removeObjects: (pageIndex: number, paths: number[][]) =>
-    session.removeObjects(pageIndex, paths),
+  removeObjects: (pageIndex: number, paths: number[][]) => session.removeObjects(pageIndex, paths),
   removeAnnotationsAt: (pageIndex: number, indices: number[]) =>
     session.removeAnnotationsAt(pageIndex, indices),
   moveObjects: (pageIndex: number, paths: number[][], dx: number, dy: number) =>

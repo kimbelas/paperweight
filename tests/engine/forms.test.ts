@@ -95,7 +95,9 @@ describe('a filled AcroForm', () => {
 
     const corner = { left: 500, bottom: 60, right: 600, top: 160 };
     expect(darkInRect(rendered.data, rendered.width, 792, corner)).toBe(0);
-    expect(darkInRect(rendered.data, rendered.width, 792, { ...BODY, top: 706 })).toBeGreaterThan(0);
+    expect(darkInRect(rendered.data, rendered.width, 792, { ...BODY, top: 706 })).toBeGreaterThan(
+      0,
+    );
   });
 });
 
@@ -304,7 +306,10 @@ describe('editing a form field', () => {
       const field = formFieldByName(doc, 0, 'Surname')!;
       const first = drawnAppearanceStyle(doc, field);
       setFormFieldText(doc, field, 'BELAS 2');
-      return { before: first, after: drawnAppearanceStyle(doc, formFieldByName(doc, 0, 'Surname')!) };
+      return {
+        before: first,
+        after: drawnAppearanceStyle(doc, formFieldByName(doc, 0, 'Surname')!),
+      };
     });
 
     expect(before?.size).toBeCloseTo(9, 1);
@@ -352,7 +357,10 @@ describe('editing a form field', () => {
       const first = drawnAppearanceStyle(doc, formFieldByName(doc, 0, 'Surname')!);
 
       setFormFieldWidth(doc, formFieldByName(doc, 0, 'Surname')!, 420);
-      return { before: first, after: drawnAppearanceStyle(doc, formFieldByName(doc, 0, 'Surname')!) };
+      return {
+        before: first,
+        after: drawnAppearanceStyle(doc, formFieldByName(doc, 0, 'Surname')!),
+      };
     });
 
     expect(before?.size).toBeCloseTo(9, 1);

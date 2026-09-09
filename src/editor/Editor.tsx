@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-  useSyncExternalStore,
-} from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import type { CommitResult, FormFieldInfo, PageInfo } from '@/engine/types';
 import {
   canSaveInPlace,
@@ -420,7 +413,9 @@ export default function Editor() {
         void engine
           .rotate(page, 1)
           .then(absorb)
-          .catch((error: unknown) => notify('error', describe(error, 'That page could not be rotated.')))
+          .catch((error: unknown) =>
+            notify('error', describe(error, 'That page could not be rotated.')),
+          )
           .finally(() => setBusy(null));
       },
       move: (page, to) => {
@@ -431,7 +426,9 @@ export default function Editor() {
             await absorb(result);
             setCurrentPage(Math.max(0, to));
           })
-          .catch((error: unknown) => notify('error', describe(error, 'That page could not be moved.')))
+          .catch((error: unknown) =>
+            notify('error', describe(error, 'That page could not be moved.')),
+          )
           .finally(() => setBusy(null));
       },
       insertAfter: (page) => {
@@ -439,7 +436,9 @@ export default function Editor() {
         void engine
           .insertBlankPage(page + 1)
           .then(absorb)
-          .catch((error: unknown) => notify('error', describe(error, 'A page could not be inserted.')))
+          .catch((error: unknown) =>
+            notify('error', describe(error, 'A page could not be inserted.')),
+          )
           .finally(() => setBusy(null));
       },
       extract: (page) => {
@@ -463,7 +462,9 @@ export default function Editor() {
             await absorb(result);
             setCurrentPage(Math.max(0, page - 1));
           })
-          .catch((error: unknown) => notify('error', describe(error, 'That page could not be deleted.')))
+          .catch((error: unknown) =>
+            notify('error', describe(error, 'That page could not be deleted.')),
+          )
           .finally(() => setBusy(null));
       },
     }),
@@ -660,7 +661,10 @@ export default function Editor() {
         width: captured.width,
         height: captured.height,
       });
-      notify('info', 'Drag the signature into place, then Save or Print to write it into the file.');
+      notify(
+        'info',
+        'Drag the signature into place, then Save or Print to write it into the file.',
+      );
     },
     [placeOnPage, saveSignature, notify],
   );
@@ -943,14 +947,10 @@ export default function Editor() {
         showTools={toolsOpen}
         showThumbs={thumbsOpen}
         onToggleTools={() =>
-          narrow
-            ? setDrawer((d) => (d === 'tools' ? null : 'tools'))
-            : setShowTools((v) => !v)
+          narrow ? setDrawer((d) => (d === 'tools' ? null : 'tools')) : setShowTools((v) => !v)
         }
         onToggleThumbs={() =>
-          narrow
-            ? setDrawer((d) => (d === 'pages' ? null : 'pages'))
-            : setShowThumbs((v) => !v)
+          narrow ? setDrawer((d) => (d === 'pages' ? null : 'pages')) : setShowThumbs((v) => !v)
         }
         onOpen={handleOpen}
         onSave={() => void save(false)}

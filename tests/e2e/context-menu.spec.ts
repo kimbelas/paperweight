@@ -199,10 +199,13 @@ test('right-clicking a page in the rail can rotate it', async ({ page }) => {
   // A quarter turn swaps the page's proportions, which is visible in the
   // canvas itself rather than only in the file.
   await expect
-    .poll(async () => {
-      const box = await page.locator('canvas[aria-label="Page 1"]').boundingBox();
-      return box ? box.width / box.height : 0;
-    }, { timeout: 40_000 })
+    .poll(
+      async () => {
+        const box = await page.locator('canvas[aria-label="Page 1"]').boundingBox();
+        return box ? box.width / box.height : 0;
+      },
+      { timeout: 40_000 },
+    )
     .toBeGreaterThan(before!.width / before!.height);
 });
 

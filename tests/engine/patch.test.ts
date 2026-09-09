@@ -47,9 +47,7 @@ describe('patching a scanned region', () => {
     // scanned-page.pdf has dark bands standing in for lines of print. This
     // region covers one of them, verified by rendering: rows 570-576 are dark
     // and the paper around them is a light grey, not white.
-    const before = await withFixture('scanned-page.pdf', (doc) =>
-      renderPage(doc, 0, { scale: 1 }),
-    );
+    const before = await withFixture('scanned-page.pdf', (doc) => renderPage(doc, 0, { scale: 1 }));
 
     const region = { left: 100, bottom: 566, right: 300, top: 580 };
 
@@ -112,9 +110,7 @@ describe('patching a scanned region', () => {
   });
 
   it('leaves the rest of the page alone', async () => {
-    const before = await withFixture('scanned-page.pdf', (doc) =>
-      renderPage(doc, 0, { scale: 1 }),
-    );
+    const before = await withFixture('scanned-page.pdf', (doc) => renderPage(doc, 0, { scale: 1 }));
 
     const bytes = await withFixture('scanned-page.pdf', async (doc) => {
       await patchTextRegion(doc, {

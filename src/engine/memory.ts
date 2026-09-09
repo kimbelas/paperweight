@@ -111,11 +111,7 @@ export function withScope<T>(mod: WrappedPdfiumModule, fn: (s: Scope) => T): T {
  * them, which surfaced as replacement text mysteriously losing its repeated
  * letters.
  */
-export function setObjectMatrix(
-  mod: WrappedPdfiumModule,
-  obj: number,
-  m: Matrix,
-): boolean {
+export function setObjectMatrix(mod: WrappedPdfiumModule, obj: number, m: Matrix): boolean {
   return withScope(mod, (scope) => mod.FPDFPageObj_SetMatrix(obj, scope.allocMatrix(m)));
 }
 

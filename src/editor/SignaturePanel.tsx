@@ -27,7 +27,11 @@ export function SignaturePanel({ onRemove, onAddSignature }: SignaturePanelProps
   const savedSignatures = useEditor((s) => s.savedSignatures);
 
   return (
-    <section className="border-t p-3" style={{ borderColor: 'var(--app-border)' }} aria-label="Signatures">
+    <section
+      className="border-t p-3"
+      style={{ borderColor: 'var(--app-border)' }}
+      aria-label="Signatures"
+    >
       <h2
         className="mb-2 flex items-baseline justify-between gap-2 text-[11px] font-semibold uppercase tracking-wide"
         style={{ color: 'var(--app-text-faint)' }}
@@ -87,10 +91,16 @@ export function SignaturePanel({ onRemove, onAddSignature }: SignaturePanelProps
 
       {candidates.length === 0 ? (
         <details className="mt-3">
-          <summary className="cursor-pointer text-[11px]" style={{ color: 'var(--app-text-faint)' }}>
+          <summary
+            className="cursor-pointer text-[11px]"
+            style={{ color: 'var(--app-text-faint)' }}
+          >
             Nothing in this file looks like a signature
           </summary>
-          <p className="mt-1.5 text-[11px] leading-relaxed" style={{ color: 'var(--app-text-faint)' }}>
+          <p
+            className="mt-1.5 text-[11px] leading-relaxed"
+            style={{ color: 'var(--app-text-faint)' }}
+          >
             Anything drawn straight into the page as plain shapes, or printed and scanned, cannot be
             told apart from the rest of the page.
           </p>
@@ -133,7 +143,11 @@ function SignatureCard({
 
       <ul className="m-0 mb-2 list-none p-0">
         {candidate.reasons.map((reason, index) => (
-          <li key={index} className="text-[11px] leading-snug" style={{ color: 'var(--app-text-dim)' }}>
+          <li
+            key={index}
+            className="text-[11px] leading-snug"
+            style={{ color: 'var(--app-text-dim)' }}
+          >
             {reason}
           </li>
         ))}
@@ -177,7 +191,10 @@ function SignatureCard({
 }
 
 function ConfidenceTag({ confidence }: { confidence: SignatureCandidate['confidence'] }) {
-  const styles: Record<SignatureCandidate['confidence'], { bg: string; fg: string; label: string }> = {
+  const styles: Record<
+    SignatureCandidate['confidence'],
+    { bg: string; fg: string; label: string }
+  > = {
     certain: { bg: 'var(--app-ok-soft)', fg: 'var(--app-ok)', label: 'certain' },
     high: { bg: 'var(--app-ok-soft)', fg: 'var(--app-ok)', label: 'likely' },
     medium: { bg: 'var(--app-warn-soft)', fg: 'var(--app-warn)', label: 'maybe' },

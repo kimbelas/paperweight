@@ -210,7 +210,9 @@ describe('replacing existing text', () => {
     });
 
     await withBytes(bytes, (doc) => {
-      const all = getTextRuns(doc, 0).map((r) => r.text).join(' | ');
+      const all = getTextRuns(doc, 0)
+        .map((r) => r.text)
+        .join(' | ');
       expect(all).toContain('Rewritten in place');
       expect(all).not.toContain('inside the form XObject');
       // The page's own text is untouched.
@@ -267,22 +269,17 @@ describe('replacing existing text', () => {
  */
 describe('nothing else changes', () => {
   it('leaves the rest of the page pixel-identical after a text edit', async () => {
-    const before = await withFixture('simple-text.pdf', (doc) =>
-      renderPage(doc, 0, { scale: 1 }),
-    );
+    const before = await withFixture('simple-text.pdf', (doc) => renderPage(doc, 0, { scale: 1 }));
 
-    const { bytes, bandTop, bandHeight } = await withFixture(
-      'simple-text.pdf',
-      async (doc) => {
-        const line = getTextLines(doc, 0).find((l) => l.text.includes('Acme'))!;
-        // The band to exclude, in bitmap rows. PDF y is up, bitmap y is down.
-        const pad = 6;
-        const top = Math.floor(792 - line.bounds.top - pad);
-        const height = Math.ceil(line.bounds.top - line.bounds.bottom + pad * 2);
-        await replaceLineText(doc, { page: 0, lineId: line.id, text: 'Zeta Holdings' });
-        return { bytes: doc.save(), bandTop: top, bandHeight: height };
-      },
-    );
+    const { bytes, bandTop, bandHeight } = await withFixture('simple-text.pdf', async (doc) => {
+      const line = getTextLines(doc, 0).find((l) => l.text.includes('Acme'))!;
+      // The band to exclude, in bitmap rows. PDF y is up, bitmap y is down.
+      const pad = 6;
+      const top = Math.floor(792 - line.bounds.top - pad);
+      const height = Math.ceil(line.bounds.top - line.bounds.bottom + pad * 2);
+      await replaceLineText(doc, { page: 0, lineId: line.id, text: 'Zeta Holdings' });
+      return { bytes: doc.save(), bandTop: top, bandHeight: height };
+    });
 
     const after = await withBytes(bytes, (doc) => renderPage(doc, 0, { scale: 1 }));
 
@@ -313,8 +310,12 @@ describe('nothing else changes', () => {
       page4: renderPage(doc, 4, { scale: 1 }),
     }));
 
-    expect(diffPixels(before.page2.data, after.page2.data, before.page2.width, before.page2.height)).toBe(0);
-    expect(diffPixels(before.page4.data, after.page4.data, before.page4.width, before.page4.height)).toBe(0);
+    expect(
+      diffPixels(before.page2.data, after.page2.data, before.page2.width, before.page2.height),
+    ).toBe(0);
+    expect(
+      diffPixels(before.page4.data, after.page4.data, before.page4.width, before.page4.height),
+    ).toBe(0);
   });
 });
 

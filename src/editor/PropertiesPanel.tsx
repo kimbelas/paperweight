@@ -113,16 +113,17 @@ export function PropertiesPanel({ onDeleteSelection }: PropertiesPanelProps) {
             />
           </Field>
           <p className="text-[11px] leading-snug" style={{ color: 'var(--app-text-faint)' }}>
-            Sampled from the page behind it. A cover hides content visually; the content is still
-            in the file.
+            Sampled from the page behind it. A cover hides content visually; the content is still in
+            the file.
           </p>
         </div>
       )}
 
       {(item?.kind === 'signature' || item?.kind === 'image') && item.bitmap && (
         <p className="mb-3 text-[11px] leading-snug" style={{ color: 'var(--app-text-faint)' }}>
-          {Math.round(item.rect.right - item.rect.left)} × {Math.round(item.rect.top - item.rect.bottom)} pt
-          on the page. Drag it to move, or use a corner to resize — the proportions stay locked.
+          {Math.round(item.rect.right - item.rect.left)} ×{' '}
+          {Math.round(item.rect.top - item.rect.bottom)} pt on the page. Drag it to move, or use a
+          corner to resize — the proportions stay locked.
         </p>
       )}
 

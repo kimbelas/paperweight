@@ -73,7 +73,10 @@ test('the page a crawler receives describes the app', async ({ browser }) => {
       'content',
       /\/opengraph-image\.png/,
     );
-    await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute('content', '1200');
+    await expect(page.locator('meta[property="og:image:width"]')).toHaveAttribute(
+      'content',
+      '1200',
+    );
     await expect(page.locator('meta[name="twitter:card"]')).toHaveAttribute(
       'content',
       'summary_large_image',

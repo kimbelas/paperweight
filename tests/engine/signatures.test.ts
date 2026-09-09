@@ -153,9 +153,7 @@ describe('removing signatures', () => {
 
   it('removes an ink annotation', async () => {
     const bytes = await withFixture('annotation-signatures.pdf', (doc) => {
-      const ink = scanPageForSignatures(doc, 0).find((c) =>
-        c.reasons.some((r) => /ink/i.test(r)),
-      )!;
+      const ink = scanPageForSignatures(doc, 0).find((c) => c.reasons.some((r) => /ink/i.test(r)))!;
       removeSignature(doc, ink);
       return doc.save();
     });

@@ -244,7 +244,12 @@ describe('page operations', () => {
   it('deletes pages from the highest index down', async () => {
     const session = await openSession('multipage.pdf');
     session.deletePages([0, 2]);
-    const remaining = [0, 1, 2].map((i) => session.textLines(i).map((l) => l.text).join(' '));
+    const remaining = [0, 1, 2].map((i) =>
+      session
+        .textLines(i)
+        .map((l) => l.text)
+        .join(' '),
+    );
     expect(remaining[0]).toContain('Page 2');
     expect(remaining[1]).toContain('Page 4');
     expect(remaining[2]).toContain('Page 5');
@@ -272,8 +277,18 @@ describe('page operations', () => {
     const session = await openSession('multipage.pdf');
     // Move page 5 (index 4) to the front.
     session.movePages([4], 0);
-    expect(session.textLines(0).map((l) => l.text).join(' ')).toContain('Page 5');
-    expect(session.textLines(1).map((l) => l.text).join(' ')).toContain('Page 1');
+    expect(
+      session
+        .textLines(0)
+        .map((l) => l.text)
+        .join(' '),
+    ).toContain('Page 5');
+    expect(
+      session
+        .textLines(1)
+        .map((l) => l.text)
+        .join(' '),
+    ).toContain('Page 1');
     session.close();
   });
 
@@ -286,8 +301,18 @@ describe('page operations', () => {
     await other.open(bytes);
     expect(other.info().pageCount).toBe(2);
     // Order follows the request, not the original document.
-    expect(other.textLines(0).map((l) => l.text).join(' ')).toContain('Page 4');
-    expect(other.textLines(1).map((l) => l.text).join(' ')).toContain('Page 2');
+    expect(
+      other
+        .textLines(0)
+        .map((l) => l.text)
+        .join(' '),
+    ).toContain('Page 4');
+    expect(
+      other
+        .textLines(1)
+        .map((l) => l.text)
+        .join(' '),
+    ).toContain('Page 2');
     other.close();
     session.close();
   });

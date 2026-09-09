@@ -15,11 +15,7 @@ import type { Annotation } from './types';
  */
 
 /** Read a string entry from an annotation's dictionary. */
-function readAnnotString(
-  mod: WrappedPdfiumModule,
-  annot: number,
-  key: string,
-): string {
+function readAnnotString(mod: WrappedPdfiumModule, annot: number, key: string): string {
   return withScope(mod, (scope) => {
     const needed = mod.FPDFAnnot_GetStringValue(annot, key, 0, 0);
     if (needed <= 2) return '';
@@ -116,11 +112,7 @@ export function listAnnotations(doc: PdfDocument, pageIndex: number): Annotation
  * Indices are removed high to low, because `FPDFPage_RemoveAnnot` renumbers
  * everything after the one it removes.
  */
-export function removeAnnotations(
-  doc: PdfDocument,
-  pageIndex: number,
-  indices: number[],
-): number {
+export function removeAnnotations(doc: PdfDocument, pageIndex: number, indices: number[]): number {
   const { mod } = doc;
   const page = doc.page(pageIndex);
   let removed = 0;
@@ -202,7 +194,8 @@ export function certificationLevel(doc: PdfDocument): number {
   let strictest = 0;
   for (const sig of listDigitalSignatures(doc)) {
     if (sig.docMdpPermission > 0) {
-      strictest = strictest === 0 ? sig.docMdpPermission : Math.min(strictest, sig.docMdpPermission);
+      strictest =
+        strictest === 0 ? sig.docMdpPermission : Math.min(strictest, sig.docMdpPermission);
     }
   }
   return strictest;

@@ -97,11 +97,7 @@ export function listPageObjects(doc: PdfDocument, pageIndex: number): PageObject
  * Between overlapping candidates the smallest wins, which makes a small item
  * on top of a large background selectable at all.
  */
-export function hitTestObject(
-  objects: PageObject[],
-  x: number,
-  y: number,
-): PageObject | null {
+export function hitTestObject(objects: PageObject[], x: number, y: number): PageObject | null {
   let best: PageObject | null = null;
   let bestArea = Infinity;
 

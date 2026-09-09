@@ -204,9 +204,7 @@ async function commitReusingFont(
   const { mod } = doc;
   const [keep, ...discard] = ctx.handles;
 
-  const ok = withScope(mod, (scope) =>
-    mod.FPDFText_SetText(keep, scope.allocUtf16(ctx.text)),
-  );
+  const ok = withScope(mod, (scope) => mod.FPDFText_SetText(keep, scope.allocUtf16(ctx.text)));
   if (!ok) throw new Error('The replacement text could not be applied.');
 
   // The kept object may have started mid-line, so reposition it to the line's
@@ -234,8 +232,7 @@ async function commitReusingFont(
 
 /** Which font a redraw should use. */
 type RedrawFont =
-  | { kind: 'original'; handle: number }
-  | { kind: 'fallback'; fallback: FallbackFont };
+  { kind: 'original'; handle: number } | { kind: 'fallback'; fallback: FallbackFont };
 
 /**
  * Path B: remove the line and draw a replacement.
@@ -263,9 +260,7 @@ async function commitByRedraw(
   const obj = mod.FPDFPageObj_CreateTextObj(doc.handle, fontHandle, ctx.line.fontSize);
   if (!obj) throw new Error('A replacement text object could not be created.');
 
-  const ok = withScope(mod, (scope) =>
-    mod.FPDFText_SetText(obj, scope.allocUtf16(ctx.text)),
-  );
+  const ok = withScope(mod, (scope) => mod.FPDFText_SetText(obj, scope.allocUtf16(ctx.text)));
   if (!ok) {
     mod.FPDFPageObj_Destroy(obj);
     throw new Error('The replacement text could not be applied.');
@@ -363,12 +358,7 @@ async function fitObjectWithFallback(
   applyFit(doc, obj, width, ctx);
 }
 
-function applyFit(
-  doc: PdfDocument,
-  obj: number,
-  width: number,
-  ctx: CommitContext,
-): void {
+function applyFit(doc: PdfDocument, obj: number, width: number, ctx: CommitContext): void {
   const { mod } = doc;
   const ratio = ctx.availableWidth / width;
   if (ratio >= 1) return; // It fits.

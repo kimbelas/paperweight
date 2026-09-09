@@ -200,7 +200,9 @@ for (let p = 0; p < mod.FPDF_GetPageCount(doc); p++) {
 console.log(`\n  ---- summary ----`);
 console.log(`  fields: ${total}`);
 console.log(`  auto-sized (/DA "0 Tf"): ${autoSized.length}`);
-console.log(`  comb (one character per cell): ${comb.length}${comb.length ? ` -> ${comb.slice(0, 8).join(', ')}` : ''}`);
+console.log(
+  `  comb (one character per cell): ${comb.length}${comb.length ? ` -> ${comb.slice(0, 8).join(', ')}` : ''}`,
+);
 console.log(
   `  NOTE: comb fields re-space per character whenever their appearance is\n` +
     `        rebuilt, which no /DA change can prevent.\n`,

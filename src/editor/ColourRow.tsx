@@ -37,9 +37,7 @@ export function ColourRow({
             className="focus-ring h-5 w-5 shrink-0 rounded"
             style={{
               background: `rgb(${swatch.r},${swatch.g},${swatch.b})`,
-              border: active
-                ? '2px solid var(--app-accent)'
-                : '1px solid var(--app-border-strong)',
+              border: active ? '2px solid var(--app-accent)' : '1px solid var(--app-border-strong)',
               cursor: 'pointer',
             }}
             aria-label={`Use ${describeColour(swatch)}`}

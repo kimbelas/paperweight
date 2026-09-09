@@ -199,7 +199,12 @@ export function SignatureModal({ open, onClose, onUse }: SignatureModalProps) {
             type="button"
             onClick={onClose}
             className="focus-ring rounded px-2 py-1 text-lg leading-none"
-            style={{ background: 'transparent', border: 'none', color: 'var(--app-text-dim)', cursor: 'pointer' }}
+            style={{
+              background: 'transparent',
+              border: 'none',
+              color: 'var(--app-text-dim)',
+              cursor: 'pointer',
+            }}
             aria-label="Close"
           >
             ×
@@ -227,7 +232,10 @@ export function SignatureModal({ open, onClose, onUse }: SignatureModalProps) {
             </button>
           ))}
 
-          <label className="ml-auto flex items-center gap-2 text-xs" style={{ color: 'var(--app-text-dim)' }}>
+          <label
+            className="ml-auto flex items-center gap-2 text-xs"
+            style={{ color: 'var(--app-text-dim)' }}
+          >
             Ink
             <input
               type="color"
@@ -298,7 +306,8 @@ export function SignatureModal({ open, onClose, onUse }: SignatureModalProps) {
                     onClick={() => setFontKey(font.key)}
                     className="focus-ring flex items-center justify-between rounded-md px-3 py-2 text-left"
                     style={{
-                      background: fontKey === font.key ? 'var(--app-accent-soft)' : 'var(--app-panel-2)',
+                      background:
+                        fontKey === font.key ? 'var(--app-accent-soft)' : 'var(--app-panel-2)',
                       border: `1px solid ${fontKey === font.key ? 'var(--app-accent)' : 'var(--app-border)'}`,
                       cursor: 'pointer',
                     }}
@@ -396,7 +405,12 @@ export function SignatureModal({ open, onClose, onUse }: SignatureModalProps) {
             type="button"
             onClick={() => void handleUse()}
             className="focus-ring rounded-md px-3 py-1.5 text-xs font-medium"
-            style={{ background: 'var(--app-accent)', border: 'none', color: '#fff', cursor: 'pointer' }}
+            style={{
+              background: 'var(--app-accent)',
+              border: 'none',
+              color: '#fff',
+              cursor: 'pointer',
+            }}
           >
             Place on page
           </button>

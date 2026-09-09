@@ -124,10 +124,7 @@ function isPdf(file: File): boolean {
 }
 
 /** Write back to the file the user opened. Chromium only. */
-export async function saveToHandle(
-  handle: FileSystemFileHandle,
-  bytes: Uint8Array,
-): Promise<void> {
+export async function saveToHandle(handle: FileSystemFileHandle, bytes: Uint8Array): Promise<void> {
   const writable = await handle.createWritable();
   try {
     // A fresh ArrayBuffer view is required: the transferred buffer coming back

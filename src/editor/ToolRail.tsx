@@ -135,8 +135,7 @@ export function ToolRail({
   // Open while the tool is armed, and also whenever a placed mark is selected
   // — otherwise a mark dropped with the tool and then picked up again with
   // Select would have no controls anywhere.
-  const markSelected =
-    overlay.find((o) => o.id === selectedOverlayId)?.kind === 'mark';
+  const markSelected = overlay.find((o) => o.id === selectedOverlayId)?.kind === 'mark';
   const showMarks = tool === 'mark' || markSelected;
 
   if (collapsed) {
@@ -179,7 +178,12 @@ export function ToolRail({
         </RailIcon>
 
         {onDeleteSelection && (
-          <RailIcon label="Delete selection" title="Delete the selected item (Delete)" danger onClick={onDeleteSelection}>
+          <RailIcon
+            label="Delete selection"
+            title="Delete the selected item (Delete)"
+            danger
+            onClick={onDeleteSelection}
+          >
             <IconTrash size={19} />
           </RailIcon>
         )}
@@ -211,7 +215,6 @@ export function ToolRail({
               <Icon size={20} />
             </ToolCard>
           ))}
-
         </div>
 
         {showMarks && (
@@ -384,11 +387,7 @@ function RailIcon({
       className={`focus-ring grid h-10 w-10 place-items-center rounded-lg${active ? '' : ' btn-quiet'}`}
       style={{
         background: active ? 'var(--app-accent-soft)' : undefined,
-        color: danger
-          ? 'var(--app-danger)'
-          : active
-            ? 'var(--app-accent)'
-            : 'var(--app-text-dim)',
+        color: danger ? 'var(--app-danger)' : active ? 'var(--app-accent)' : 'var(--app-text-dim)',
         border: `1px solid ${active ? 'var(--app-accent)' : 'transparent'}`,
         cursor: 'pointer',
       }}

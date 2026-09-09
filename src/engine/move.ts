@@ -82,7 +82,13 @@ export function moveObjects(
       continue;
     }
 
-    const captured = captureNestedText(doc, pageIndex, path, handle, ancestorFor(doc, pageIndex, path));
+    const captured = captureNestedText(
+      doc,
+      pageIndex,
+      path,
+      handle,
+      ancestorFor(doc, pageIndex, path),
+    );
     if (captured) nestedText.push(captured);
     else unmovable++;
   }
@@ -204,9 +210,7 @@ function redrawNestedText(
   const obj = mod.FPDFPageObj_CreateTextObj(doc.handle, item.fontHandle, item.fontSize);
   if (!obj) return;
 
-  const ok = withScope(mod, (scope) =>
-    mod.FPDFText_SetText(obj, scope.allocUtf16(item.text)),
-  );
+  const ok = withScope(mod, (scope) => mod.FPDFText_SetText(obj, scope.allocUtf16(item.text)));
   if (!ok) {
     mod.FPDFPageObj_Destroy(obj);
     return;

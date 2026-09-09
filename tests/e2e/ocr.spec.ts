@@ -76,11 +76,7 @@ test('reads a scanned page without contacting anything', async ({ page, baseURL 
   const external: string[] = [];
   await page.route('**/*', async (route) => {
     const url = route.request().url();
-    if (
-      !url.startsWith(origin) &&
-      !url.startsWith('data:') &&
-      !url.startsWith('blob:')
-    ) {
+    if (!url.startsWith(origin) && !url.startsWith('data:') && !url.startsWith('blob:')) {
       external.push(url);
     }
     await route.continue();

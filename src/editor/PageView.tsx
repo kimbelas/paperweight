@@ -1061,9 +1061,7 @@ export function PageView({
                 outline: `1px dashed ${accent}`,
                 background: `color-mix(in srgb, ${accent} 7%, transparent)`,
               }}
-              title={
-                poor ? `Read as "${line.text}" — low confidence` : `Read as "${line.text}"`
-              }
+              title={poor ? `Read as "${line.text}" — low confidence` : `Read as "${line.text}"`}
             />
           );
         })}

@@ -187,7 +187,11 @@ export function Toolbar({
         {theme === 'dark' ? <IconSun size={18} /> : <IconMoon size={18} />}
       </IconButton>
 
-      <IconButton label="Keyboard shortcuts and what to know (?)" name="Help" onClick={onShowShortcuts}>
+      <IconButton
+        label="Keyboard shortcuts and what to know (?)"
+        name="Help"
+        onClick={onShowShortcuts}
+      >
         <IconKeyboard size={18} />
       </IconButton>
 

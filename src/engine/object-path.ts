@@ -27,11 +27,7 @@ export function parsePathKey(key: string): number[] {
 }
 
 /** Resolve a path to a live object handle, or 0 if it no longer exists. */
-export function resolvePath(
-  mod: WrappedPdfiumModule,
-  page: number,
-  path: ObjectPath,
-): number {
+export function resolvePath(mod: WrappedPdfiumModule, page: number, path: ObjectPath): number {
   if (path.length === 0) return 0;
 
   let obj = mod.FPDFPage_GetObject(page, path[0]);

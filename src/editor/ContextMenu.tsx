@@ -32,9 +32,7 @@ export interface MenuAction {
 }
 
 export type MenuEntry =
-  | MenuAction
-  | { id: string; separator: true }
-  | { id: string; heading: string };
+  MenuAction | { id: string; separator: true } | { id: string; heading: string };
 
 function isAction(entry: MenuEntry): entry is MenuAction {
   return 'onSelect' in entry;
@@ -73,10 +71,7 @@ export function ContextMenu({ request, onClose }: { request: MenuRequest; onClos
       ? Math.max(MARGIN, Math.min(request.y - height, window.innerHeight - height - MARGIN))
       : request.y;
 
-    const left = Math.max(
-      MARGIN,
-      Math.min(request.x, window.innerWidth - width - MARGIN),
-    );
+    const left = Math.max(MARGIN, Math.min(request.x, window.innerWidth - width - MARGIN));
 
     setPos({ left, top });
   }, [request.x, request.y, request.entries]);
