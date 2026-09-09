@@ -124,6 +124,10 @@ needs two repository secrets: `CLOUDFLARE_API_TOKEN`, a token with the
 
 ## Licences
 
+Paperweight is MIT licensed; the text is in `LICENSE`. It was chosen to match
+what it is built on rather than to make a point: everything below is
+permissive, so a licence that was not would be the only obstacle in the stack.
+
 PDFium is BSD-3-Clause and its wrapper `@embedpdf/pdfium` is MIT. tesseract.js
 and its OCR core are Apache-2.0. The bundled fonts (Liberation, Dancing
 Script, Great Vibes, Caveat) are SIL OFL 1.1, with their licence files in

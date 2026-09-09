@@ -30,6 +30,7 @@
     "url": "https://github.com/kimbelas/paperweight/issues"
   },
   "author": "Matt Belas",
+  "license": "MIT",
   "scripts": {
     "predev": "node scripts/sync-wasm.mjs && node scripts/sync-ocr.mjs && node scripts/build-worker.mjs",
     "dev": "next dev",

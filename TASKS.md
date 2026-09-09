@@ -111,7 +111,9 @@ engine layer and its tests instead of being discarded.
 - [x] `waitForLanding` replaces ten copies of a readiness gate that the prerendered heading would have made meaningless _(High, Small)_
 - [x] Submit the sitemap to a search console and add the verification token.
       Google verified and Bing done; indexing is requested by hand _(Medium, Small)_
-- [ ] Choose a licence; the repository has none, so the metadata claims none _(Medium, Small)_
+- [x] Choose a licence: MIT, matching the permissive stack it is built on.
+      `LICENSE`, the `license` field, the README and the public copy all say so
+      _(Medium, Small)_
 
 ## Fixes from real-document testing (2026-09-08)
 

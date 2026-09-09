@@ -70,10 +70,10 @@ description of Paperweight should keep them:
 
 ## Built with
 
-PDFium (BSD-3-Clause) via the MIT-licensed `@embedpdf/pdfium` wrapper,
-tesseract.js (Apache-2.0), React and Next.js exported as static files, and the
-Liberation, Caveat, Dancing Script and Great Vibes fonts under SIL OFL 1.1.
-No AGPL dependencies.
+Paperweight itself is MIT licensed. It is built on PDFium (BSD-3-Clause) via
+the MIT-licensed `@embedpdf/pdfium` wrapper, tesseract.js (Apache-2.0), React
+and Next.js exported as static files, and the Liberation, Caveat, Dancing
+Script and Great Vibes fonts under SIL OFL 1.1. No AGPL dependencies.
 
 ## Links
 
