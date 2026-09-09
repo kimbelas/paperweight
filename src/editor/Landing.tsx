@@ -1,7 +1,14 @@
 'use client';
 
 import {
+  ANSWER,
+  ARCHITECTURE,
+  ARCHITECTURE_COLUMNS,
+  ARCHITECTURE_HEADING,
+  ARCHITECTURE_HINT,
   AUTHOR,
+  CONTENT_UPDATED,
+  CONTENT_UPDATED_LABEL,
   CREDITS,
   FAQ,
   FEATURES,
@@ -9,10 +16,28 @@ import {
   HEADLINE,
   LEAD,
   LIMITS,
+  NAV_LABEL,
+  NOSCRIPT,
   PRIVACY,
   REPO_URL,
+  SECTIONS,
   STEPS,
+  TRUST,
+  type FeatureIcon,
 } from '@/site';
+import {
+  IconAddText,
+  IconCover,
+  IconEditText,
+  IconField,
+  IconImage,
+  IconMark,
+  IconPages,
+  IconPrint,
+  IconScanText,
+  IconSelect,
+  IconSignature,
+} from './Icons';
 
 /**
  * The page as it looks with no document open — and the only thing a crawler,
@@ -37,51 +62,85 @@ import {
  * time under Node, where `window` does not exist, and it is rendered again on
  * the client inside a bailed-out Suspense boundary, which React renders fresh
  * rather than hydrating — identical markup is what keeps that swap invisible.
+ * That constraint is also why nothing here collapses, tabs, counts up or
+ * reveals on scroll: every affordance is a link, a button, or plain CSS.
  *
  * `onOpen` is absent in the prerendered copy, and the button is then genuinely
  * `disabled` rather than merely styled as such. That is what the browser tests
  * wait on: the heading now exists before any script has run, so it no longer
  * proves the editor is ready, and an enabled button does.
+ *
+ * ## What this page is allowed to look like
+ *
+ * The rest of the app is a tool: hairlines, one accent, no ornament, nothing
+ * on screen that is not doing a job. This page is the first thing anyone sees
+ * of it, so it has to be built to the same rule, and the rule is easier to
+ * state as a list of things that are not here:
+ *
+ * - **No badge or eyebrow pill.** The headline says what this is. A tinted
+ *   capsule above it repeating the category is decoration wearing a label.
+ * - **No tick icons beside claims.** A green tick is a picture of
+ *   trustworthiness; the sentence next to it is the evidence. Only one of
+ *   those survives being quoted, so only one is worth the space.
+ * - **No icon in a tinted rounded tile.** The feature glyphs are the
+ *   toolbar's own, set inline at text size and in text colour, because their
+ *   job is to match a button the reader will press later — not to give each
+ *   paragraph a coloured square.
+ * - **No cards.** Every group here is separated by a hairline rule instead.
+ *   Boxes inside boxes cost a border, a background and a shadow to express a
+ *   grouping that a rule and some space already express.
+ * - **No drop-zone rectangle.** The whole pane accepts a drop, so drawing a
+ *   dashed box in one corner of it is a smaller and less truthful target than
+ *   the one that actually exists. `Editor` tints the pane while a file is
+ *   over it; the button and the line beside it are what the page shows.
+ *
+ * What is left is type, one accent on one button, and rules. That is also the
+ * arrangement an extractor reads best, so the restraint costs nothing: the
+ * definitional answer opens the page, every claim carries its evidence, the
+ * headings name the product, each section has a stable `id` to be cited by,
+ * and the comparison, the steps and the features are a table, an ordered list
+ * and a list.
  */
 export function Landing({
   onOpen,
   loading = false,
-  dragOver = false,
   status,
 }: {
   onOpen?: () => void;
   loading?: boolean;
-  dragOver?: boolean;
   status?: string;
 }) {
   const ready = Boolean(onOpen);
 
   return (
     <div
-      className="mx-auto w-full max-w-2xl px-4 pb-16 sm:px-6"
+      // One column width for everything on the page. A container wider than
+      // its own longest line leaves every rule running out past the text,
+      // which is what makes a page look like it is floating rather than set.
+      className="mx-auto w-full max-w-3xl px-5 pb-20 sm:px-8"
       data-landing={ready ? 'ready' : 'loading'}
     >
-      <section className="grid min-h-[min(70vh,620px)] place-items-center py-8">
-        <div
-          className="w-full max-w-lg rounded-2xl px-6 py-12 text-center sm:px-8"
-          style={{
-            background: 'var(--app-panel)',
-            border: `2px dashed ${dragOver ? 'var(--app-accent)' : 'var(--app-border-strong)'}`,
-          }}
-        >
-          <h1 className="text-xl font-semibold tracking-tight text-balance sm:text-2xl">
-            {HEADLINE}
-          </h1>
+      {/* --- The answer, then the way in -------------------------------- */}
 
-          <p className="mx-auto mt-3 max-w-sm text-sm" style={{ color: 'var(--app-text-dim)' }}>
-            {LEAD}
-          </p>
+      <section className="pt-12 pb-12 sm:pt-16 sm:pb-14">
+        <h1 className="text-[2rem] leading-[1.08] font-semibold tracking-[-0.02em] text-balance sm:text-[2.6rem]">
+          {HEADLINE}
+        </h1>
 
+        {/* The `speakable` target in the structured data. Keep the id. */}
+        <p id="answer" className="mt-6 max-w-[40rem] text-[17px] leading-[1.6] text-pretty">
+          {ANSWER}
+        </p>
+
+        <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
           <button
             type="button"
             onClick={onOpen}
             disabled={!ready || loading}
-            className="focus-ring btn-solid mt-6 rounded-lg px-4 py-2 text-sm font-medium"
+            // Deliberately larger than any control in the toolbar. This is
+            // the one thing on the page a first-time visitor has to find, and
+            // it is competing with a headline set at 42px.
+            className="focus-ring btn-solid rounded-lg px-6 py-3.5 text-[15px] font-semibold"
             style={{
               color: '#fff',
               border: 'none',
@@ -92,139 +151,310 @@ export function Landing({
             {loading ? 'Opening…' : 'Choose a PDF'}
           </button>
 
-          {status && (
-            <p className="mt-3 text-xs" role="status" style={{ color: 'var(--app-text-faint)' }}>
-              {status}
-            </p>
-          )}
-
-          <p
-            className="mx-auto mt-8 max-w-sm text-xs leading-relaxed"
-            style={{ color: 'var(--app-text-faint)' }}
-          >
-            {FINE_PRINT}
-          </p>
-
-          <noscript>
-            <p
-              className="mx-auto mt-4 max-w-sm text-xs leading-relaxed"
-              style={{ color: 'var(--app-text-faint)' }}
-            >
-              Paperweight needs JavaScript, WebAssembly and Web Workers to run. Everything below
-              describes what it does; the editor itself will not start without them.
-            </p>
-          </noscript>
+          <span className="text-sm" style={{ color: 'var(--app-text-dim)' }}>
+            {LEAD}
+          </span>
         </div>
-      </section>
 
-      <div className="flex flex-col gap-4">
-        <Panel id="what-it-does" heading="What it does">
-          <ul className="flex flex-col gap-3 text-sm">
-            {FEATURES.map((feature) => (
-              <li key={feature.label}>
-                <strong className="font-semibold">{feature.label}</strong>{' '}
-                <span style={{ color: 'var(--app-text-dim)' }}>{feature.text}</span>
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <Panel id="how-it-works" heading="How it works">
-          <ol className="flex flex-col gap-3 text-sm">
-            {STEPS.map((step, index) => (
-              <li key={step.title} className="flex gap-3">
-                <span
-                  aria-hidden="true"
-                  className="grid h-6 w-6 shrink-0 place-items-center rounded-full text-xs font-semibold tabular-nums"
-                  style={{ background: 'var(--app-accent-soft)', color: 'var(--app-accent)' }}
-                >
-                  {index + 1}
-                </span>
-                <span>
-                  <strong className="font-semibold">{step.title}</strong>{' '}
-                  <span style={{ color: 'var(--app-text-dim)' }}>{step.text}</span>
-                </span>
-              </li>
-            ))}
-          </ol>
-        </Panel>
-
-        <Panel id="questions" heading="Questions">
-          <div className="flex flex-col gap-5">
-            {FAQ.map((entry) => (
-              <div key={entry.question}>
-                {/* Deliberately not a <details>: an answer a crawler has to
-                    open is an answer some crawlers never read. */}
-                <h3 className="text-sm font-semibold">{entry.question}</h3>
-                <p className="mt-1 text-sm leading-relaxed" style={{ color: 'var(--app-text-dim)' }}>
-                  {entry.answer}
-                </p>
-              </div>
-            ))}
-          </div>
-        </Panel>
-
-        <Panel id="privacy" heading="Privacy">
-          <p className="text-sm leading-relaxed" style={{ color: 'var(--app-text-dim)' }}>
-            {PRIVACY}
+        {status && (
+          <p className="mt-3 text-xs" role="status" style={{ color: 'var(--app-text-faint)' }}>
+            {status}
           </p>
-        </Panel>
+        )}
 
-        <Panel id="limits" heading="Deliberate limits">
-          <p className="mb-3 text-sm leading-relaxed" style={{ color: 'var(--app-text-dim)' }}>
-            Stated here rather than discovered later. Each one is a decision, not a gap waiting to
-            be filled.
-          </p>
-          <ul className="flex list-disc flex-col gap-2 pl-5 text-sm">
-            {LIMITS.map((limit) => (
-              <li key={limit} style={{ color: 'var(--app-text-dim)' }}>
-                {limit}
-              </li>
-            ))}
-          </ul>
-        </Panel>
-
-        <footer
-          className="px-1 pt-2 text-xs leading-relaxed"
+        <p
+          className="mt-6 max-w-[62ch] text-xs leading-relaxed"
           style={{ color: 'var(--app-text-faint)' }}
         >
-          <p>
-            Made by{' '}
-            <a className="focus-ring underline" href={AUTHOR.url} rel="noopener">
-              {AUTHOR.name}
-            </a>
-            .{' '}
-            <a className="focus-ring underline" href={REPO_URL} rel="noopener">
-              Source on GitHub
-            </a>
-            .
+          {FINE_PRINT}
+        </p>
+
+        <noscript>
+          <p
+            className="mt-3 max-w-[62ch] text-xs leading-relaxed"
+            style={{ color: 'var(--app-text-faint)' }}
+          >
+            {NOSCRIPT}
           </p>
-          <p className="mt-1">{CREDITS}</p>
-        </footer>
-      </div>
+        </noscript>
+      </section>
+
+      {/* --- The claims, as terms and their evidence --------------------- */}
+
+      <dl className="grid gap-x-10 border-t sm:grid-cols-2" style={rule}>
+        {TRUST.map((claim) => (
+          <div key={claim.label} className="border-b py-4 sm:py-5" style={rule}>
+            <dt className="text-sm font-semibold">{claim.label}</dt>
+            <dd
+              className="mt-1 max-w-[52ch] text-sm leading-relaxed"
+              style={{ color: 'var(--app-text-dim)' }}
+            >
+              {claim.detail}
+            </dd>
+          </div>
+        ))}
+      </dl>
+
+      {/* --- Anchors, so a passage can be cited by fragment -------------- */}
+
+      <nav
+        aria-label={NAV_LABEL}
+        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-5 text-xs"
+        style={{ color: 'var(--app-text-faint)' }}
+      >
+        <span>{NAV_LABEL}</span>
+        {SECTIONS.map((entry, index) => (
+          <span key={entry.id} className="flex items-baseline gap-x-3">
+            {index > 0 && <span aria-hidden="true">·</span>}
+            <a
+              href={`#${entry.id}`}
+              className="focus-ring underline decoration-1 underline-offset-2"
+              style={{ color: 'var(--app-text-dim)' }}
+            >
+              {entry.nav}
+            </a>
+          </span>
+        ))}
+      </nav>
+
+      {/* --- What it does ------------------------------------------------ */}
+
+      <Section id="what-it-does">
+        <ul className="grid border-t sm:grid-cols-2 sm:gap-x-10" style={rule}>
+          {FEATURES.map((feature) => {
+            const Icon = FEATURE_ICONS[feature.icon];
+            return (
+              <li key={feature.label} className="border-b py-4" style={rule}>
+                <h3 className="flex items-center gap-2 text-sm font-semibold">
+                  <Icon size={14} />
+                  {feature.label}
+                </h3>
+                <p
+                  className="mt-1.5 text-sm leading-relaxed"
+                  style={{ color: 'var(--app-text-dim)' }}
+                >
+                  {feature.text}
+                </p>
+              </li>
+            );
+          })}
+        </ul>
+      </Section>
+
+      {/* --- How it works ------------------------------------------------ */}
+
+      <Section id="how-it-works">
+        <ol className="grid border-t sm:grid-cols-3 sm:gap-x-10" style={rule}>
+          {STEPS.map((step, index) => (
+            <li key={step.title} className="flex gap-2 border-b py-4" style={rule}>
+              {/* Hung beside the heading rather than set inside it. Inside,
+                  the heading's text — the thing a crawler lists and a screen
+                  reader announces — becomes "1Open", and stops matching the
+                  step name in the structured data. */}
+              <span
+                aria-hidden="true"
+                className="w-3 shrink-0 text-sm font-semibold tabular-nums"
+                style={{ color: 'var(--app-text-faint)' }}
+              >
+                {index + 1}
+              </span>
+              <div>
+                <h3 className="text-sm font-semibold">{step.title}</h3>
+                <p
+                  className="mt-1.5 text-sm leading-relaxed"
+                  style={{ color: 'var(--app-text-dim)' }}
+                >
+                  {step.text}
+                </p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      </Section>
+
+      {/* --- Privacy, and the architecture it follows from ---------------- */}
+
+      <Section id="privacy">
+        <p
+          className="max-w-[68ch] text-sm leading-relaxed"
+          style={{ color: 'var(--app-text-dim)' }}
+        >
+          {PRIVACY}
+        </p>
+
+        <h3 id="architecture-heading" className="mt-9 text-sm font-semibold">
+          {ARCHITECTURE_HEADING}
+        </h3>
+
+        <p className="mt-1 text-xs md:hidden" style={{ color: 'var(--app-text-faint)' }}>
+          {ARCHITECTURE_HINT}
+        </p>
+
+        {/* A wide table scrolls inside its own box. The page must never
+            scroll sideways on a phone because of it. */}
+        <div className="mt-3 overflow-x-auto">
+          <table
+            aria-labelledby="architecture-heading"
+            className="w-full min-w-[38rem] border-collapse text-left text-sm"
+          >
+            <thead>
+              <tr className="border-y" style={rule}>
+                <th scope="col" className="py-2.5 pr-6 font-semibold">
+                  <span className="sr-only">{ARCHITECTURE_COLUMNS.aspect}</span>
+                </th>
+                <th scope="col" className="py-2.5 pr-6 font-semibold">
+                  {ARCHITECTURE_COLUMNS.here}
+                </th>
+                <th
+                  scope="col"
+                  className="py-2.5 font-semibold"
+                  style={{ color: 'var(--app-text-faint)' }}
+                >
+                  {ARCHITECTURE_COLUMNS.uploaded}
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {ARCHITECTURE.map((row) => (
+                <tr key={row.aspect} className="border-b" style={rule}>
+                  <th scope="row" className="py-3 pr-6 align-top font-medium">
+                    {row.aspect}
+                  </th>
+                  <td className="py-3 pr-6 align-top leading-relaxed">{row.here}</td>
+                  <td
+                    className="py-3 align-top leading-relaxed"
+                    style={{ color: 'var(--app-text-dim)' }}
+                  >
+                    {row.uploaded}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Section>
+
+      {/* --- Questions ---------------------------------------------------- */}
+
+      <Section id="questions">
+        {/* Two columns by flow rather than by grid, so a long answer does not
+            leave a hole beside a short one. Deliberately not a <details>: an
+            answer a crawler has to open is an answer some crawlers never
+            read. */}
+        <div className="gap-x-10 md:columns-2">
+          {FAQ.map((entry) => (
+            <div key={entry.question} className="mb-6 break-inside-avoid last:mb-0">
+              <h3 className="text-sm font-semibold text-balance">{entry.question}</h3>
+              <p className="mt-1.5 text-sm leading-relaxed" style={{ color: 'var(--app-text-dim)' }}>
+                {entry.answer}
+              </p>
+            </div>
+          ))}
+        </div>
+      </Section>
+
+      {/* --- Limits -------------------------------------------------------- */}
+
+      <Section id="limits">
+        <ul className="grid border-t sm:grid-cols-2 sm:gap-x-10" style={rule}>
+          {LIMITS.map((limit) => (
+            <li
+              key={limit}
+              className="border-b py-3 text-sm leading-relaxed"
+              style={{ ...rule, color: 'var(--app-text-dim)' }}
+            >
+              {limit}
+            </li>
+          ))}
+        </ul>
+      </Section>
+
+      {/* --- Footer --------------------------------------------------------- */}
+
+      <footer
+        className="mt-14 border-t pt-6 text-xs leading-relaxed"
+        style={{ ...rule, color: 'var(--app-text-faint)' }}
+      >
+        <p>
+          Made by{' '}
+          <a className="focus-ring underline" href={AUTHOR.url} rel="noopener">
+            {AUTHOR.name}
+          </a>
+          .{' '}
+          <a className="focus-ring underline" href={REPO_URL} rel="noopener">
+            Source on GitHub
+          </a>
+          .
+        </p>
+        <p className="mt-1">{CREDITS}</p>
+        <p className="mt-1">
+          This page was last updated on{' '}
+          <time dateTime={CONTENT_UPDATED}>{CONTENT_UPDATED_LABEL}</time>.
+        </p>
+      </footer>
     </div>
   );
 }
 
-function Panel({
-  id,
-  heading,
-  children,
-}: {
-  id: string;
-  heading: string;
-  children: React.ReactNode;
-}) {
+/**
+ * The one border colour on the page.
+ *
+ * Tailwind's `border-*` utilities set a width and a style; the colour is a
+ * theme token, which cannot be written as a class here, so it is spread onto
+ * every ruled element from one place rather than retyped a dozen times.
+ */
+const rule = { borderColor: 'var(--app-border)' } as const;
+
+type SectionId = 'what-it-does' | 'how-it-works' | 'privacy' | 'questions' | 'limits';
+
+/**
+ * The sections by `id`, so a heading is written once in `site.ts` and read
+ * from there by the section itself, by the anchor nav above it, and by the
+ * test that compares the page to the structured data.
+ */
+const SECTION = Object.fromEntries(SECTIONS.map((entry) => [entry.id, entry])) as Record<
+  SectionId,
+  (typeof SECTIONS)[number]
+>;
+
+/**
+ * The glyph on each feature, mapped from the key `site.ts` names.
+ *
+ * These are the toolbar's own icons, set inline at text size and inheriting
+ * text colour, so an entry here and the button it describes carry the same
+ * mark.
+ */
+const FEATURE_ICONS: Record<FeatureIcon, React.ComponentType<{ size?: number }>> = {
+  'edit-text': IconEditText,
+  'add-text': IconAddText,
+  field: IconField,
+  signature: IconSignature,
+  mark: IconMark,
+  cover: IconCover,
+  image: IconImage,
+  select: IconSelect,
+  scan: IconScanText,
+  pages: IconPages,
+  print: IconPrint,
+};
+
+function Section({ id, children }: { id: SectionId; children: React.ReactNode }) {
+  const { heading, lead } = SECTION[id];
+
   return (
-    <section
-      aria-labelledby={`${id}-heading`}
-      className="rounded-2xl px-5 py-6 sm:px-7"
-      style={{ background: 'var(--app-panel)', border: '1px solid var(--app-border)' }}
-    >
-      <h2 id={`${id}-heading`} className="mb-4 text-base font-semibold tracking-tight">
+    <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-4 pt-12">
+      <h2 id={`${id}-heading`} className="text-base font-semibold tracking-tight">
         {heading}
       </h2>
-      {children}
+      {lead && (
+        <p
+          className="mt-1.5 max-w-[68ch] text-sm leading-relaxed"
+          style={{ color: 'var(--app-text-dim)' }}
+        >
+          {lead}
+        </p>
+      )}
+      <div className="mt-5">{children}</div>
     </section>
   );
 }

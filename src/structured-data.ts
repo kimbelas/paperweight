@@ -1,12 +1,29 @@
 import {
   AUTHOR,
+  CONTENT_PUBLISHED,
+  CONTENT_UPDATED,
   DESCRIPTION,
   FAQ,
   FEATURES,
   REPO_URL,
+  SECTIONS,
   SITE_NAME,
   SITE_URL,
+  STEPS,
+  TITLE,
 } from './site';
+
+/**
+ * A section's visible heading, by `id`.
+ *
+ * The nodes below borrow the headings the page actually renders rather than
+ * inventing names for themselves, because a `HowTo` called something that
+ * appears nowhere on the page is exactly the mismatch this file exists to
+ * avoid.
+ */
+function heading(id: string): string {
+  return SECTIONS.find((section) => section.id === id)?.heading ?? SITE_NAME;
+}
 
 /**
  * Schema.org description of the site, for search and answer engines.
@@ -50,6 +67,29 @@ export function structuredData(): Record<string, unknown> {
         url: AUTHOR.url,
       },
       {
+        // The page itself, as distinct from the site and from the product.
+        // It carries the dates — a consumer deciding whether a description is
+        // current looks for `dateModified`, and its absence reads as unknown
+        // rather than as unchanged — and it names the two elements worth
+        // reading aloud or lifting whole: the headline, and the paragraph
+        // under it that defines what this is.
+        '@type': 'WebPage',
+        '@id': `${SITE_URL}/#webpage`,
+        url: site,
+        name: TITLE,
+        description: DESCRIPTION,
+        isPartOf: { '@id': `${SITE_URL}/#website` },
+        about: { '@id': app },
+        primaryImageOfPage: image,
+        inLanguage: 'en',
+        datePublished: CONTENT_PUBLISHED,
+        dateModified: CONTENT_UPDATED,
+        speakable: {
+          '@type': 'SpeakableSpecification',
+          cssSelector: ['h1', '#answer'],
+        },
+      },
+      {
         '@type': ['SoftwareApplication', 'WebApplication'],
         '@id': app,
         name: SITE_NAME,
@@ -82,6 +122,44 @@ export function structuredData(): Record<string, unknown> {
         runtimePlatform: 'Web browser',
         targetProduct: { '@id': app },
         author: { '@id': author },
+      },
+      {
+        // The same three steps the page shows under "How Paperweight works".
+        // Google retired the HowTo rich result, so this earns nothing in a
+        // search listing; it is here because a procedure stated as a
+        // procedure is what an answer engine reproduces in order, rather than
+        // paraphrasing into a shape that puts saving before editing.
+        '@type': 'HowTo',
+        '@id': `${SITE_URL}/#howto`,
+        name: heading('how-it-works'),
+        description: DESCRIPTION,
+        inLanguage: 'en',
+        tool: { '@type': 'HowToTool', name: 'A current web browser' },
+        supply: { '@type': 'HowToSupply', name: 'A PDF on your device' },
+        totalTime: 'PT1M',
+        step: STEPS.map((step, index) => ({
+          '@type': 'HowToStep',
+          position: index + 1,
+          name: step.title,
+          text: step.text,
+          url: `${SITE_URL}/#how-it-works`,
+        })),
+      },
+      {
+        // The feature grid as a list. `featureList` above is a bag of
+        // strings; this is the same eleven items with positions, which is the
+        // form a "what can it do" answer is assembled from.
+        '@type': 'ItemList',
+        '@id': `${SITE_URL}/#features`,
+        name: heading('what-it-does'),
+        numberOfItems: FEATURES.length,
+        itemListOrder: 'https://schema.org/ItemListUnordered',
+        itemListElement: FEATURES.map((feature, index) => ({
+          '@type': 'ListItem',
+          position: index + 1,
+          name: feature.label,
+          description: feature.text,
+        })),
       },
       {
         '@type': 'FAQPage',
