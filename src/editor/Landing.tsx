@@ -129,7 +129,7 @@ export function Landing({
           and no picture between them — because that is what lets the hero
           reach the width the rest of the page now uses without stretching a
           line of prose past reading length. */}
-      <section className="pt-12 pb-12 sm:pt-16 sm:pb-14 xl:grid xl:grid-cols-[1.05fr_1fr] xl:items-start xl:gap-x-16 xl:gap-y-10">
+      <section className="pt-14 pb-16 sm:pt-20 sm:pb-20 xl:grid xl:grid-cols-[1.05fr_1fr] xl:items-start xl:gap-x-16 xl:gap-y-10">
         <h1 className="text-[2rem] leading-[1.08] font-semibold tracking-[-0.02em] text-balance sm:text-[2.6rem] xl:col-start-1 xl:row-start-1 xl:text-[3.4rem] xl:leading-[1.04]">
           {HEADLINE}
         </h1>
@@ -203,10 +203,10 @@ export function Landing({
 
       <dl className="grid gap-x-10 border-t sm:grid-cols-2 xl:grid-cols-4" style={rule}>
         {TRUST.map((claim) => (
-          <div key={claim.label} className="border-b py-4 sm:py-5" style={rule}>
-            <dt className="text-sm font-semibold">{claim.label}</dt>
+          <div key={claim.label} className="border-b py-5 sm:py-6" style={rule}>
+            <dt className="text-[15px] font-semibold">{claim.label}</dt>
             <dd
-              className="mt-1 max-w-[52ch] text-sm leading-relaxed"
+              className="mt-2 max-w-[52ch] text-sm leading-relaxed"
               style={{ color: 'var(--app-text-dim)' }}
             >
               {claim.detail}
@@ -219,7 +219,7 @@ export function Landing({
 
       <nav
         aria-label={NAV_LABEL}
-        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-5 text-xs"
+        className="flex flex-wrap items-baseline gap-x-3 gap-y-1 pt-8 text-xs"
         style={{ color: 'var(--app-text-faint)' }}
       >
         <span>{NAV_LABEL}</span>
@@ -247,13 +247,13 @@ export function Landing({
           {FEATURES.map((feature) => {
             const Icon = FEATURE_ICONS[feature.icon];
             return (
-              <li key={feature.label} className="border-b py-4" style={rule}>
-                <h3 className="flex items-center gap-2 text-sm font-semibold">
+              <li key={feature.label} className="border-b py-5 xl:py-6" style={rule}>
+                <h3 className="flex items-center gap-2 text-[15px] font-semibold">
                   <Icon size={14} />
                   {feature.label}
                 </h3>
                 <p
-                  className="mt-1.5 text-sm leading-relaxed"
+                  className="mt-2 text-sm leading-relaxed"
                   style={{ color: 'var(--app-text-dim)' }}
                 >
                   {feature.text}
@@ -269,7 +269,7 @@ export function Landing({
       <Section id="how-it-works">
         <ol className="grid border-t sm:grid-cols-3 sm:gap-x-10" style={rule}>
           {STEPS.map((step, index) => (
-            <li key={step.title} className="flex gap-2 border-b py-4" style={rule}>
+            <li key={step.title} className="flex gap-2 border-b py-5 xl:py-6" style={rule}>
               {/* Hung beside the heading rather than set inside it. Inside,
                   the heading's text — the thing a crawler lists and a screen
                   reader announces — becomes "1Open", and stops matching the
@@ -282,9 +282,9 @@ export function Landing({
                 {index + 1}
               </span>
               <div>
-                <h3 className="text-sm font-semibold">{step.title}</h3>
+                <h3 className="text-[15px] font-semibold">{step.title}</h3>
                 <p
-                  className="mt-1.5 text-sm leading-relaxed"
+                  className="mt-2 text-sm leading-relaxed"
                   style={{ color: 'var(--app-text-dim)' }}
                 >
                   {step.text}
@@ -305,7 +305,7 @@ export function Landing({
           {PRIVACY}
         </p>
 
-        <h3 id="architecture-heading" className="mt-9 text-sm font-semibold">
+        <h3 id="architecture-heading" className="mt-12 text-[15px] font-semibold">
           {ARCHITECTURE_HEADING}
         </h3>
 
@@ -322,15 +322,15 @@ export function Landing({
           >
             <thead>
               <tr className="border-y" style={rule}>
-                <th scope="col" className="py-2.5 pr-6 font-semibold">
+                <th scope="col" className="py-3.5 pr-6 font-semibold">
                   <span className="sr-only">{ARCHITECTURE_COLUMNS.aspect}</span>
                 </th>
-                <th scope="col" className="py-2.5 pr-6 font-semibold">
+                <th scope="col" className="py-3.5 pr-6 font-semibold">
                   {ARCHITECTURE_COLUMNS.here}
                 </th>
                 <th
                   scope="col"
-                  className="py-2.5 font-semibold"
+                  className="py-3.5 font-semibold"
                   style={{ color: 'var(--app-text-faint)' }}
                 >
                   {ARCHITECTURE_COLUMNS.uploaded}
@@ -340,12 +340,12 @@ export function Landing({
             <tbody>
               {ARCHITECTURE.map((row) => (
                 <tr key={row.aspect} className="border-b" style={rule}>
-                  <th scope="row" className="py-3 pr-6 align-top font-medium">
+                  <th scope="row" className="py-4 pr-6 align-top font-medium">
                     {row.aspect}
                   </th>
-                  <td className="py-3 pr-6 align-top leading-relaxed">{row.here}</td>
+                  <td className="py-4 pr-6 align-top leading-relaxed">{row.here}</td>
                   <td
-                    className="py-3 align-top leading-relaxed"
+                    className="py-4 align-top leading-relaxed"
                     style={{ color: 'var(--app-text-dim)' }}
                   >
                     {row.uploaded}
@@ -366,12 +366,9 @@ export function Landing({
             read. */}
         <div className="gap-x-10 md:columns-2 xl:columns-3">
           {FAQ.map((entry) => (
-            <div key={entry.question} className="mb-6 break-inside-avoid last:mb-0">
-              <h3 className="text-sm font-semibold text-balance">{entry.question}</h3>
-              <p
-                className="mt-1.5 text-sm leading-relaxed"
-                style={{ color: 'var(--app-text-dim)' }}
-              >
+            <div key={entry.question} className="mb-9 break-inside-avoid last:mb-0">
+              <h3 className="text-[15px] font-semibold text-balance">{entry.question}</h3>
+              <p className="mt-2 text-sm leading-relaxed" style={{ color: 'var(--app-text-dim)' }}>
                 {entry.answer}
               </p>
             </div>
@@ -386,7 +383,7 @@ export function Landing({
           {LIMITS.map((limit) => (
             <li
               key={limit}
-              className="border-b py-3 text-sm leading-relaxed"
+              className="border-b py-4 text-sm leading-relaxed"
               style={{ ...rule, color: 'var(--app-text-dim)' }}
             >
               {limit}
@@ -398,7 +395,7 @@ export function Landing({
       {/* --- Footer --------------------------------------------------------- */}
 
       <footer
-        className="mt-14 border-t pt-6 text-xs leading-relaxed"
+        className="mt-20 border-t pt-8 text-xs leading-relaxed"
         style={{ ...rule, color: 'var(--app-text-faint)' }}
       >
         <p>
@@ -468,19 +465,22 @@ function Section({ id, children }: { id: SectionId; children: React.ReactNode })
   const { heading, lead } = SECTION[id];
 
   return (
-    <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-4 pt-12">
-      <h2 id={`${id}-heading`} className="text-base font-semibold tracking-tight">
+    <section id={id} aria-labelledby={`${id}-heading`} className="scroll-mt-4 pt-20 xl:pt-24">
+      <h2
+        id={`${id}-heading`}
+        className="text-xl font-semibold tracking-[-0.015em] sm:text-2xl xl:text-[1.75rem]"
+      >
         {heading}
       </h2>
       {lead && (
         <p
-          className="mt-1.5 max-w-[68ch] text-sm leading-relaxed"
+          className="mt-3 max-w-[68ch] text-[15px] leading-relaxed"
           style={{ color: 'var(--app-text-dim)' }}
         >
           {lead}
         </p>
       )}
-      <div className="mt-5">{children}</div>
+      <div className="mt-8">{children}</div>
     </section>
   );
 }
