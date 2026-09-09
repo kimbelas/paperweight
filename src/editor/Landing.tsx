@@ -114,74 +114,94 @@ export function Landing({
 
   return (
     <div
-      // One column width for everything on the page. A container wider than
-      // its own longest line leaves every rule running out past the text,
-      // which is what makes a page look like it is floating rather than set.
-      className="mx-auto w-full max-w-3xl px-5 pb-20 sm:px-8"
+      // Full width up to 1440, then it stops: past that the page would grow
+      // without anything to fill it. A container wider than its own longest
+      // line is only safe where structure fills the gap, which is why the
+      // prose below keeps its own measure while the grids, the table and the
+      // question columns take the width the container gives them.
+      className="mx-auto w-full max-w-[1440px] px-5 pb-20 sm:px-8 lg:px-10"
       data-landing={ready ? 'ready' : 'loading'}
     >
       {/* --- The answer, then the way in -------------------------------- */}
 
-      <section className="pt-12 pb-12 sm:pt-16 sm:pb-14">
-        <h1 className="text-[2rem] leading-[1.08] font-semibold tracking-[-0.02em] text-balance sm:text-[2.6rem]">
+      {/* Below 1280 this is one column, exactly as it was. Above it the
+          headline and the paragraph sit side by side — type in both, no panel
+          and no picture between them — because that is what lets the hero
+          reach the width the rest of the page now uses without stretching a
+          line of prose past reading length. */}
+      <section className="pt-12 pb-12 sm:pt-16 sm:pb-14 xl:grid xl:grid-cols-[1.05fr_1fr] xl:items-start xl:gap-x-16 xl:gap-y-10">
+        <h1 className="text-[2rem] leading-[1.08] font-semibold tracking-[-0.02em] text-balance sm:text-[2.6rem] xl:col-start-1 xl:row-start-1 xl:text-[3.4rem] xl:leading-[1.04]">
           {HEADLINE}
         </h1>
 
-        {/* The `speakable` target in the structured data. Keep the id. */}
-        <p id="answer" className="mt-6 max-w-[40rem] text-[17px] leading-[1.6] text-pretty">
+        {/* The `speakable` target in the structured data. Keep the id.
+            It follows the headline in the source at every width; the grid
+            puts it beside rather than beneath on a wide screen, which is
+            placement, not reordering. */}
+        <p
+          id="answer"
+          className="mt-6 max-w-[40rem] text-[17px] leading-[1.6] text-pretty xl:col-start-2 xl:row-start-1 xl:mt-0 xl:pt-2"
+        >
           {ANSWER}
         </p>
 
-        <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3">
-          <button
-            type="button"
-            onClick={onOpen}
-            disabled={!ready || loading}
-            // Deliberately larger than any control in the toolbar. This is
-            // the one thing on the page a first-time visitor has to find, and
-            // it is competing with a headline set at 42px.
-            className="focus-ring btn-solid rounded-lg px-6 py-3.5 text-[15px] font-semibold"
-            style={{
-              color: '#fff',
-              border: 'none',
-              cursor: loading ? 'progress' : 'pointer',
-              opacity: ready && !loading ? 1 : 0.7,
-            }}
-          >
-            {loading ? 'Opening…' : 'Choose a PDF'}
-          </button>
+        {/* Row two: the way in under the headline, the small print under the
+            paragraph. Splitting them is what stops the headline column from
+            trailing off into empty space at 1440. */}
+        <div className="xl:col-start-1 xl:row-start-2">
+          <div className="mt-8 flex flex-wrap items-center gap-x-5 gap-y-3 xl:mt-0">
+            <button
+              type="button"
+              onClick={onOpen}
+              disabled={!ready || loading}
+              // Deliberately larger than any control in the toolbar. This is
+              // the one thing on the page a first-time visitor has to find, and
+              // it is competing with a headline set at 42px.
+              className="focus-ring btn-solid rounded-lg px-6 py-3.5 text-[15px] font-semibold"
+              style={{
+                color: '#fff',
+                border: 'none',
+                cursor: loading ? 'progress' : 'pointer',
+                opacity: ready && !loading ? 1 : 0.7,
+              }}
+            >
+              {loading ? 'Opening…' : 'Choose a PDF'}
+            </button>
 
-          <span className="text-sm" style={{ color: 'var(--app-text-dim)' }}>
-            {LEAD}
-          </span>
+            <span className="text-sm" style={{ color: 'var(--app-text-dim)' }}>
+              {LEAD}
+            </span>
+          </div>
+
+          {status && (
+            <p className="mt-3 text-xs" role="status" style={{ color: 'var(--app-text-faint)' }}>
+              {status}
+            </p>
+          )}
         </div>
 
-        {status && (
-          <p className="mt-3 text-xs" role="status" style={{ color: 'var(--app-text-faint)' }}>
-            {status}
-          </p>
-        )}
-
-        <p
-          className="mt-6 max-w-[62ch] text-xs leading-relaxed"
-          style={{ color: 'var(--app-text-faint)' }}
-        >
-          {FINE_PRINT}
-        </p>
-
-        <noscript>
+        <div className="xl:col-start-2 xl:row-start-2">
           <p
-            className="mt-3 max-w-[62ch] text-xs leading-relaxed"
+            className="mt-6 max-w-[62ch] text-xs leading-relaxed xl:mt-0"
             style={{ color: 'var(--app-text-faint)' }}
           >
-            {NOSCRIPT}
+            {FINE_PRINT}
           </p>
-        </noscript>
+
+          <noscript>
+            <p
+              className="mt-3 max-w-[62ch] text-xs leading-relaxed"
+              style={{ color: 'var(--app-text-faint)' }}
+            >
+              {NOSCRIPT}
+            </p>
+          </noscript>
+        </div>
       </section>
 
       {/* --- The claims, as terms and their evidence --------------------- */}
 
-      <dl className="grid gap-x-10 border-t sm:grid-cols-2" style={rule}>
+      <dl className="grid gap-x-10 border-t sm:grid-cols-2 xl:grid-cols-4" style={rule}>
         {TRUST.map((claim) => (
           <div key={claim.label} className="border-b py-4 sm:py-5" style={rule}>
             <dt className="text-sm font-semibold">{claim.label}</dt>
@@ -220,7 +240,10 @@ export function Landing({
       {/* --- What it does ------------------------------------------------ */}
 
       <Section id="what-it-does">
-        <ul className="grid border-t sm:grid-cols-2 sm:gap-x-10" style={rule}>
+        <ul
+          className="grid border-t sm:grid-cols-2 sm:gap-x-10 lg:grid-cols-3 xl:grid-cols-4"
+          style={rule}
+        >
           {FEATURES.map((feature) => {
             const Icon = FEATURE_ICONS[feature.icon];
             return (
@@ -341,11 +364,14 @@ export function Landing({
             leave a hole beside a short one. Deliberately not a <details>: an
             answer a crawler has to open is an answer some crawlers never
             read. */}
-        <div className="gap-x-10 md:columns-2">
+        <div className="gap-x-10 md:columns-2 xl:columns-3">
           {FAQ.map((entry) => (
             <div key={entry.question} className="mb-6 break-inside-avoid last:mb-0">
               <h3 className="text-sm font-semibold text-balance">{entry.question}</h3>
-              <p className="mt-1.5 text-sm leading-relaxed" style={{ color: 'var(--app-text-dim)' }}>
+              <p
+                className="mt-1.5 text-sm leading-relaxed"
+                style={{ color: 'var(--app-text-dim)' }}
+              >
                 {entry.answer}
               </p>
             </div>
@@ -356,7 +382,7 @@ export function Landing({
       {/* --- Limits -------------------------------------------------------- */}
 
       <Section id="limits">
-        <ul className="grid border-t sm:grid-cols-2 sm:gap-x-10" style={rule}>
+        <ul className="grid border-t sm:grid-cols-2 sm:gap-x-10 xl:grid-cols-4" style={rule}>
           {LIMITS.map((limit) => (
             <li
               key={limit}
