@@ -182,6 +182,62 @@ body {
 }
 
 /*
+ * A section's title holds while its content goes past, at every width.
+ *
+ * From `xl` the section is two columns and the title is a grid item that
+ * sticks in its own column — that is `Section`'s own `xl:sticky`, and nothing
+ * here applies.
+ *
+ * Below that the section is a single column, and the obvious version of this
+ * does nothing at all: the title's wrapper is only as tall as the title, so a
+ * sticky heading inside it has no room to travel. `display: contents` takes
+ * the wrapper's box away, which makes the section itself the heading's
+ * containing block — the whole height of it — so the heading pins and then
+ * leaves with its section, the way the wide layout does.
+ *
+ * Only the heading pins, not the lead paragraph with it. The lead runs to five
+ * lines on a phone, and pinning ~180px of a 844px viewport under a 66px nav
+ * reads as the page having jammed rather than as a title being held.
+ *
+ * The offset has to clear the "Jump to" strip, which is sticky at the top of
+ * the same scrollport — and the strip's height is not a constant. It wraps to
+ * two lines on a narrow screen and fits on one when there is room, and where
+ * that flips cannot be expressed in CSS: it depends on the rendered width of
+ * five link labels from `src/site.ts`. A media query at the measured flip was
+ * tried and is engine-dependent — Chromium and Firefox stop wrapping at
+ * different widths, so no single breakpoint is right in both.
+ *
+ * So the title sticks at the strip's *short* height and reserves the
+ * difference as padding. When the strip wraps it covers that padding, being
+ * opaque and above; when it does not, the reserve is the title's own
+ * background and reads as space. `margin-block-start` cancels the padding in
+ * flow, so the resting layout is exactly what it was. One measured number,
+ * and its failure is slack rather than a heading tucked behind the nav.
+ *
+ * `seo.spec.ts` measures the pinned title against the strip in all three
+ * engines, so a longer label fails a test rather than going unnoticed.
+ */
+@media (max-width: 1279px) {
+  .section-title {
+    display: contents;
+  }
+
+  .section-heading {
+    position: sticky;
+    /* The strip on one line. */
+    top: 42px;
+    /* What a second line of it adds, reserved and then given back. */
+    padding-block-start: 24px;
+    margin-block-start: -24px;
+    padding-block-end: 0.5rem;
+    /* Over the content passing beneath, under the strip's own z-10. */
+    z-index: 5;
+    /* Opaque, or the content shows through the held title. */
+    background: var(--app-bg);
+  }
+}
+
+/*
  * Reveal on scroll, in CSS and nothing else.
  *
  * `Landing` may not touch a browser API or hold state: it is prerendered under

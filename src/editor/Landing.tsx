@@ -746,13 +746,21 @@ function Section({ id, children }: { id: SectionId; children: React.ReactNode })
         all, and say nothing about why.
 
         No z-index, so it passes under the jump nav rather than over it.
+
+        That is the wide layout. Below `xl` there is one column and the same
+        trap in a different shape: this wrapper is only as tall as the title,
+        so pinning anything inside it would again travel nowhere. The
+        `section-title` class is `display: contents` there, which takes this
+        box away and makes the section the heading's containing block — and
+        `section-heading` below is what pins. Both live in `globals.css`, with
+        the note on why the offset is two measured numbers.
       */}
-      <div className="xl:sticky xl:top-[4.5rem] xl:self-start">
+      <div className="section-title xl:sticky xl:top-[4.5rem] xl:self-start">
         {/* The number is a sibling of the heading, never inside it. Inside,
             the heading's own text — which the structured data lists and the
             SEO suite compares against `SECTIONS` — would read "01What
             Paperweight does". */}
-        <div className="flex items-baseline gap-4">
+        <div className="section-heading flex items-baseline gap-4">
           <span
             aria-hidden="true"
             className="section-number text-xs font-semibold"
