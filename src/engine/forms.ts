@@ -24,7 +24,7 @@ import { removeAnnotations } from './annotations';
 import { findFallback, measureFallback } from './fonts';
 import { insertText } from './insert';
 import { readRectF, withScope } from './memory';
-import type { FormFieldInfo, FormFieldKind, FormFieldFit } from './types';
+import type { FormFieldInfo, FormFieldKind, FormFieldFit, Rect } from './types';
 
 /** Smallest useful field width, in points. Narrower is not clickable. */
 const MIN_FIELD_WIDTH = 24;
@@ -113,12 +113,23 @@ function readFormString(
   });
 }
 
-/** Describe an open widget annotation as plain data. */
+/**
+ * Describe an open widget annotation as plain data.
+ *
+ * `annotIndex` is the widget's position in the page's annotation list, which
+ * is how the appearance sizes recorded at open time are keyed. It is asked
+ * for rather than looked up here because both callers already know it.
+ *
+ * `siblings` likewise: it is shared across a whole listing so the page is
+ * walked once rather than once per field. See `pageTypeSizes`.
+ */
 function describeField(
   doc: PdfDocument,
   form: number,
   annot: number,
   pageIndex: number,
+  annotIndex: number,
+  siblings: () => number[],
 ): FormFieldInfo {
   const { mod } = doc;
 
@@ -152,6 +163,8 @@ function describeField(
     readOnly,
     editable: typeable && !readOnly,
     toggleable: clickable && !readOnly,
+    textSize: drawnSize(doc, annot, annotIndex, pageIndex, rect, siblings),
+    clips: appearanceTrustworthyAt(doc, form, annot),
     notEditableReason: readOnly
       ? 'The form marks this field read-only, so its value is not meant to be changed here.'
       : describeLimit(kind),
@@ -188,7 +201,14 @@ export function formFieldAt(
   if (!annot) return null;
 
   try {
-    return describeField(doc, form, annot, pageIndex);
+    return describeField(
+      doc,
+      form,
+      annot,
+      pageIndex,
+      mod.FPDFPage_GetAnnotIndex(page, annot),
+      pageTypeSizes(doc, pageIndex),
+    );
   } finally {
     mod.FPDFPage_CloseAnnot(annot);
   }
@@ -203,12 +223,13 @@ export function listFormFields(doc: PdfDocument, pageIndex: number): FormFieldIn
   const page = doc.page(pageIndex);
   const count = mod.FPDFPage_GetAnnotCount(page);
   const fields: FormFieldInfo[] = [];
+  const siblings = pageTypeSizes(doc, pageIndex);
 
   for (let i = 0; i < count; i++) {
     const annot = mod.FPDFPage_GetAnnot(page, i);
     if (!annot) continue;
     try {
-      const field = describeField(doc, form, annot, pageIndex);
+      const field = describeField(doc, form, annot, pageIndex, i, siblings);
       // A non-widget annotation reports an unknown field type and no name.
       if (field.kind !== 'unknown' || field.name) fields.push(field);
     } finally {
@@ -270,53 +291,35 @@ function withFieldAnnot<T>(
 }
 
 /**
- * The size the field's text is actually drawn at.
- *
- * A `/DA` of `0 Tf` means auto: PDFium shrinks the type until the value fits
- * the box, so such a field never clips, it just gets smaller and smaller. A
- * fixed size does clip, and that is the case worth warning about. The two
- * need telling apart before anything is said to the user about cut-off text.
- */
-function drawnFontSize(doc: PdfDocument, field: FormFieldInfo): { size: number; auto: boolean } {
-  const { mod } = doc;
-  const form = doc.form;
-  const height = field.rect.top - field.rect.bottom;
-
-  const declared = form
-    ? withFieldAnnot(doc, field.page, field.name, (annot) =>
-        withScope(mod, (scope) => {
-          const out = scope.allocFloat();
-          if (!mod.FPDFAnnot_GetFontSize(form, annot, out)) return 0;
-          return mod.pdfium.getValue(out, 'float');
-        }),
-      )
-    : 0;
-
-  if (declared > 0) return { size: declared, auto: false };
-  // Auto-sized: PDFium's own choice tracks the box height closely enough for
-  // measuring, and this branch is only used to report, never to draw.
-  return { size: Math.max(4, height * 0.66), auto: true };
-}
-
-/**
  * Will this value fit the field, and how wide would it have to be?
+ *
+ * Measured at `field.textSize`, which is the size the value is really drawn
+ * at rather than the size the box would suggest. Measuring from the box was
+ * wrong by half on any auto-sized field — a 24pt widget on a form set in 9pt
+ * is ordinary — and every width this function reports was wrong with it.
  *
  * Measured with the bundled metric-compatible sans face rather than the
  * form's own font. A form's `/DA` almost always names one of the base-14
  * (`/Helv`), which is not embedded and has no font program in the file to
  * measure; the bundled substitute is metric-compatible with it, which is the
  * same basis the text editor already uses for fitting.
+ *
+ * `fits` asks whether the value will be *cut off*, which is not the same
+ * question as whether it is wider than the box. Only a field the engine will
+ * leave as a field clips; one that will be drawn into the page instead runs
+ * on in full. See `field.clips`.
  */
 export async function measureFieldFit(
   doc: PdfDocument,
   field: FormFieldInfo,
   text: string,
 ): Promise<FormFieldFit> {
-  const { size, auto } = drawnFontSize(doc, field);
   const fallback = findFallback('sans');
 
   const width =
-    fallback && text.length > 0 ? ((await measureFallback(fallback, text, size)) ?? 0) : 0;
+    fallback && text.length > 0
+      ? ((await measureFallback(fallback, text, field.textSize)) ?? 0)
+      : 0;
 
   const inner = Math.max(0, field.rect.right - field.rect.left - FIELD_INSET * 2);
   const pageWidth = doc.pageInfo(field.page).width;
@@ -327,12 +330,17 @@ export async function measureFieldFit(
   );
 
   return {
-    fits: auto || width <= inner,
-    autoSized: auto,
+    fits: !field.clips || width <= inner,
+    autoSized: declaredFieldSize(doc, field) <= 0,
     textWidth: width,
     requiredWidth: Math.ceil(required),
     maxWidth: Math.floor(Math.max(MIN_FIELD_WIDTH, pageWidth - PAGE_MARGIN - field.rect.left)),
   };
+}
+
+/** The type size a named field's `/DA` declares, or 0 when it says "auto". */
+function declaredFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
+  return withFieldAnnot(doc, field.page, field.name, (annot) => declaredSize(doc, annot));
 }
 
 /**
@@ -429,24 +437,6 @@ export function drawnAppearanceStyle(
   });
 }
 
-/**
- * Pin the style a field is *actually drawn in* into its `/DA`.
- *
- * A `/DA` of `0 Tf` means auto: size the type to the box. PDFium takes that
- * literally and fills the height — on a 24pt-tall widget it picks 18pt, where
- * the tool that filled the form had drawn the value at 9pt and stored that in
- * the appearance stream. Nothing is wrong until the value is edited; then the
- * appearance is rebuilt from `/DA`, the auto size wins, and that one field
- * comes back in huge type while every untouched field around it still renders
- * from its original stream at the original size. The user sees one field go
- * strange the moment they touch it.
- *
- * So before regenerating, the font and size the existing appearance uses are
- * read back out of it and written into `/DA` as an explicit size. A `/DA`
- * that already declares a size is left alone: it is the document's own
- * intent, and this is only here to resolve "auto" the way the file already
- * resolved it once.
- */
 /** The explicit type sizes the other fields on a page are set in. */
 function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
   const { mod } = doc;
@@ -483,8 +473,28 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
+/** The type size a widget's `/DA` declares, or 0 when it says "auto". */
+function declaredSize(doc: PdfDocument, annot: number): number {
+  const match = TF.exec(readAnnotString(doc, annot, 'DA'));
+  return match ? Number(match[2]) : 0;
+}
+
 /**
- * Decide the size an edited field must draw at, and never answer "auto".
+ * A once-only view of the sizes the other fields on a page are set in.
+ *
+ * `drawnSize` reaches for this only when a field has nothing of its own to go
+ * on — but answering walks every annotation on the page, so describing a form
+ * field by field would be quadratic in the number of fields, and a real form
+ * has a hundred. Memoised across a listing, and lazily, so a page whose
+ * fields all declare a size never pays for it at all.
+ */
+function pageTypeSizes(doc: PdfDocument, pageIndex: number): () => number[] {
+  let sizes: number[] | null = null;
+  return () => (sizes ??= siblingFieldSizes(doc, pageIndex).filter((s) => s > 0));
+}
+
+/**
+ * The size this field's value is really drawn at, and never "auto".
  *
  * Auto is the whole problem. `0 Tf` tells PDFium to fill the box height, so
  * regenerating an appearance blows the type up — 18pt on a 24pt widget, where
@@ -507,7 +517,51 @@ function median(values: number[]): number {
  *     enough to read as a form entry rather than a heading.
  *
  * Step 3 is the one that matters in practice, and its absence was the bug:
- * the previous version simply gave up at that point and let auto win.
+ * an earlier version simply gave up at that point and let auto win.
+ *
+ * This is the one answer to that question in the engine. It used to be given
+ * three times — once to pin `/DA`, once to draw the value as page text, and
+ * once, differently and wrongly, as `height * 0.66` to measure the fit — and
+ * the interface then made a fourth guess of its own from the box height. Any
+ * of them disagreeing with the others is a field that measures as one size
+ * and draws as another.
+ */
+function drawnSize(
+  doc: PdfDocument,
+  annot: number,
+  annotIndex: number,
+  pageIndex: number,
+  rect: Rect,
+  siblings: () => number[],
+): number {
+  // 1. Already explicit: the document's own decision.
+  const declared = declaredSize(doc, annot);
+  if (declared > 0) return declared;
+
+  // 2. The size the file's own appearance draws at.
+  //
+  // Read from the snapshot rather than from the stream in front of us: for a
+  // field the file left without an appearance, PDFium has already generated
+  // one at the auto size, and preserving that would preserve the very thing
+  // being fixed.
+  const original = doc.originalApSize(pageIndex, annotIndex);
+  if (original !== null && original > 0) return original;
+
+  // 3. What the rest of the form uses.
+  const sizes = siblings();
+  if (sizes.length > 0) return median(sizes);
+
+  // 4. Nothing to go on: pick from the box, erring small.
+  const height = rect.top - rect.bottom;
+  return Math.min(11, Math.max(6, Math.round(height * 0.45)));
+}
+
+/**
+ * The `/DA` an auto-sized field needs so PDFium draws it at its real size.
+ *
+ * Null when the field already declares a size: that is the document's own
+ * intent, and this exists only to resolve "auto" the way the file itself
+ * resolved it once.
  */
 function resolveTextSize(
   doc: PdfDocument,
@@ -518,7 +572,6 @@ function resolveTextSize(
   const da = readAnnotString(doc, annot, 'DA');
   const daTf = TF.exec(da);
 
-  // 1. Already explicit: leave the document's intent alone.
   if (daTf && Number(daTf[2]) > 0) return null;
 
   const ap = readAppearance(doc, annot);
@@ -530,23 +583,11 @@ function resolveTextSize(
   // base-14 name even when the form's `/DR` does not list it.
   const font = apTf?.[1] ?? daTf?.[1] ?? 'Helv';
 
-  // 2. The size the file's own appearance draws at.
-  //
-  // Read from the snapshot rather than from the stream in front of us: for a
-  // field the file left without an appearance, PDFium has already generated
-  // one at the auto size, and preserving that would preserve the very thing
-  // being fixed.
-  const original = doc.originalApSize(field.page, annotIndex);
-  if (original !== null && original > 0) return { font, size: original, fill };
-
-  // 3. What the rest of the form uses.
-  const siblings = siblingFieldSizes(doc, field.page).filter((s) => s > 0);
-  if (siblings.length > 0) return { font, size: median(siblings), fill };
-
-  // 4. Nothing to go on: pick from the box, erring small.
-  const height = field.rect.top - field.rect.bottom;
-  const size = Math.min(11, Math.max(6, Math.round(height * 0.45)));
-  return { font, size, fill };
+  return {
+    font,
+    size: drawnSize(doc, annot, annotIndex, field.page, field.rect, pageTypeSizes(doc, field.page)),
+    fill,
+  };
 }
 
 /**
@@ -580,27 +621,19 @@ function round2(value: number): number {
 /**
  * The size an edited field must draw at, definitely rather than possibly.
  *
- * Same chain as `resolveTextSize`, but it always answers with a number: used
- * when the value is going to be drawn by this engine rather than by PDFium.
+ * Read from the document rather than taken off a `FormFieldInfo`, because it
+ * decides what gets drawn into the file and the struct in a caller's hand may
+ * predate a mutation.
  */
 function effectiveFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
-  return withFieldAnnot(doc, field.page, field.name, (annot, _form, annotIndex) => {
-    const declared = TF.exec(readAnnotString(doc, annot, 'DA'));
-    if (declared && Number(declared[2]) > 0) return Number(declared[2]);
-
-    const original = doc.originalApSize(field.page, annotIndex);
-    if (original !== null && original > 0) return original;
-
-    const siblings = siblingFieldSizes(doc, field.page).filter((s) => s > 0);
-    if (siblings.length > 0) return median(siblings);
-
-    const height = field.rect.top - field.rect.bottom;
-    return Math.min(11, Math.max(6, Math.round(height * 0.45)));
-  });
+  const siblings = pageTypeSizes(doc, field.page);
+  return withFieldAnnot(doc, field.page, field.name, (annot, _form, annotIndex) =>
+    drawnSize(doc, annot, annotIndex, field.page, field.rect, siblings),
+  );
 }
 
 /**
- * Can PDFium be trusted to rebuild this field's appearance faithfully?
+ * Can PDFium be trusted to rebuild this widget's appearance faithfully?
  *
  * Only when the document itself says how the field should look. An explicit
  * size in `/DA` is that statement, and a plain single-line field is one
@@ -608,18 +641,26 @@ function effectiveFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
  * box height, a comb field it will re-space per character, a multiline field
  * a single-line redraw cannot represent — comes back looking unlike the
  * document, and no amount of steering `/DA` fixes it.
+ *
+ * This is also the answer to "does this field clip its value", which is not
+ * a separate question: a field the engine leaves as a field clips to its own
+ * rectangle, and one it draws into the page instead runs on in full.
  */
+function appearanceTrustworthyAt(doc: PdfDocument, form: number, annot: number): boolean {
+  if (declaredSize(doc, annot) <= 0) return false;
+
+  const flags = doc.mod.FPDFAnnot_GetFormFieldFlags(form, annot);
+  if ((flags & FormFlag.Comb) !== 0) return false;
+  if ((flags & FormFlag.Multiline) !== 0) return false;
+
+  return true;
+}
+
+/** `appearanceTrustworthyAt` for a named field, read fresh from the document. */
 export function appearanceIsTrustworthy(doc: PdfDocument, field: FormFieldInfo): boolean {
-  return withFieldAnnot(doc, field.page, field.name, (annot, form) => {
-    const declared = TF.exec(readAnnotString(doc, annot, 'DA'));
-    if (!declared || !(Number(declared[2]) > 0)) return false;
-
-    const flags = doc.mod.FPDFAnnot_GetFormFieldFlags(form, annot);
-    if ((flags & FormFlag.Comb) !== 0) return false;
-    if ((flags & FormFlag.Multiline) !== 0) return false;
-
-    return true;
-  });
+  return withFieldAnnot(doc, field.page, field.name, (annot, form) =>
+    appearanceTrustworthyAt(doc, form, annot),
+  );
 }
 
 /** What converting a field into page text did. */

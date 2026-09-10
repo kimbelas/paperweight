@@ -271,6 +271,12 @@ export class EditorSession {
         // box height, a comb field re-spaced per character. Drawing the value
         // as page text instead is the only way to guarantee what is shown is
         // what prints, and it also stops the value being clipped to the box.
+        //
+        // `width` is deliberately not applied here: page text is not clipped,
+        // so there is no box to widen. The interface offers no width for such
+        // a field either -- see `FormFieldInfo.clips` -- so a width arriving
+        // on this path would be a caller asking for something the outcome
+        // makes meaningless, not a width being quietly lost.
         if (!appearanceIsTrustworthy(doc, field)) {
           const conversion = await convertFieldToText(doc, field, value);
           return this.conversionBadges(field, conversion);

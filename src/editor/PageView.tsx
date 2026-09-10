@@ -679,13 +679,18 @@ export function PageView({
             icon: <IconEditText size={15} />,
             onSelect: () => void activateField(field),
           });
-          entries.push({
-            id: 'widen',
-            label: 'Widen to fit the value',
-            hint: 'A field clips to its own box, so a longer value is cut off in the file',
-            icon: <IconWiden size={15} />,
-            onSelect: () => void onWidenField(field),
-          });
+          // Only where the box actually cuts the value off. A field whose
+          // value the engine will draw into the page runs on in full, so
+          // widening it changes nothing a user would see.
+          if (field.clips) {
+            entries.push({
+              id: 'widen',
+              label: 'Widen to fit the value',
+              hint: 'A field clips to its own box, so a longer value is cut off in the file',
+              icon: <IconWiden size={15} />,
+              onSelect: () => void onWidenField(field),
+            });
+          }
           if (field.value !== '') {
             entries.push({
               id: 'clear',
@@ -1113,18 +1118,20 @@ export function PageView({
           key={`field:${editTarget.field.name}`}
           text={editTarget.field.value}
           bounds={editTarget.field.rect}
-          // A field declares no type size of its own, and its /DA may say 0,
-          // meaning "auto". The widget's height is the honest guide to how
-          // big the value will actually be drawn.
-          fontSize={Math.min(
-            14,
-            Math.max(7, (editTarget.field.rect.top - editTarget.field.rect.bottom) * 0.6),
-          )}
+          // The size the engine says the value is really drawn at, not a
+          // guess from the widget's height. The two are unrelated: a 24pt-tall
+          // box on a form set in 9pt is ordinary, and guessing from the box
+          // showed such a value at 14pt — it swelled the moment it was
+          // clicked, and "Widen to fit" then sized the box to that fiction.
+          fontSize={editTarget.field.textSize}
           colour={{ r: 0, g: 0, b: 0, a: 255 }}
           hint={`Enter to update ${formFieldPhrase(editTarget.field)} · Esc to cancel`}
-          // A field's width is part of the document: it clips its own
-          // appearance, so a value wider than the box is cut off in the file.
-          resizable={editTarget.field.editable}
+          // A field's width is part of the document, but only while it stays a
+          // field: it clips its own appearance, so a value wider than the box
+          // is cut off in the file. A field the engine will draw into the page
+          // instead does not clip, so there is nothing to widen and nothing to
+          // warn about.
+          resizable={editTarget.field.editable && editTarget.field.clips}
           maxWidth={page.width - 6 - editTarget.field.rect.left}
           transform={transform}
           zoom={zoom}
