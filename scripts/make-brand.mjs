@@ -86,16 +86,56 @@ function shareCard(mark) {
         borderTop: `12px solid ${ACCENT}`,
       },
     },
+    /*
+     * The lockup: mark, name, and PDF as a descriptor.
+     *
+     * The name is `SITE_NAME` and only ever that — "PDF" here is a category
+     * label, not part of it, which is why it is smaller, tracked apart and
+     * grey rather than joined to the word, bold, or blue. It tells a scraper
+     * and a reader what this edits without renaming the thing.
+     *
+     * Not the accent: `ACCENT` has one job across this product — the weight
+     * on the mark, and the thing you can act on in the interface. At this
+     * size a blue "PDF" also reads as a link. It appears here only as the
+     * hairline above.
+     *
+     * This is the one surface big enough to carry the descriptor. The
+     * toolbar sets the name alone at 14px, where "PDF" would be grey lint
+     * sitting a few pixels from a real, open PDF.
+     */
     h(
       'div',
       { style: { display: 'flex', alignItems: 'center', gap: 28 } },
       h('img', { src: mark, width: 88, height: 88 }),
       h(
         'div',
-        {
-          style: { display: 'flex', fontSize: 60, fontWeight: 700, color: INK, letterSpacing: -1 },
-        },
-        SITE_NAME,
+        { style: { display: 'flex', alignItems: 'baseline', gap: 18 } },
+        h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              fontSize: 60,
+              fontWeight: 700,
+              color: INK,
+              letterSpacing: -1,
+            },
+          },
+          SITE_NAME,
+        ),
+        h(
+          'div',
+          {
+            style: {
+              display: 'flex',
+              fontSize: 34,
+              fontWeight: 700,
+              color: DIM,
+              letterSpacing: 2,
+            },
+          },
+          'PDF',
+        ),
       ),
     ),
     h(

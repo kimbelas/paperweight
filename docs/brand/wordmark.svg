@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 360 64" width="360" height="64" role="img" aria-label="Paperweight PDF">
+  <title>Paperweight PDF</title>
+  <!--
+    The horizontal lockup: the mark, the name, and PDF as a descriptor.
+
+    The name is "Paperweight" and only ever "Paperweight" — one word, one
+    capital. "PDF" here is a category label, not part of the name, which is
+    why it is smaller, lighter, tracked apart and grey rather than joined,
+    bold or blue. It says what the product edits; it does not rename it.
+
+    Not blue: #2563eb has one job in this product — the weight on the mark,
+    and the thing you can act on in the interface. Spending it on a suffix
+    costs that meaning. Not a chip either: a badge needs padding and a border,
+    and below about 24px those collapse into a smudge the size of a button.
+
+    Use this lockup where the type is 24px or larger — a share card, a
+    masthead, a README. Below that, drop "PDF" and set the mark and the name
+    alone: at 14px the descriptor is grey lint sitting directly above an
+    actual PDF.
+
+    The text is set in a system stack rather than outlined to paths, so it
+    renders in whatever grotesque the reader has. That is deliberate for a
+    documentation asset — it stays editable and weighs nothing — and it is
+    the reason this file is not the one to hand a printer.
+  -->
+  <g>
+    <path d="M8.5 11h10.6L25 16.9V35.5A1.5 1.5 0 0 1 23.5 37h-15A1.5 1.5 0 0 1 7 35.5v-23A1.5 1.5 0 0 1 8.5 11Z"
+      fill="#ffffff" stroke="#18181b" stroke-width="2" stroke-linejoin="round" />
+    <path d="M19.1 11 25 16.9h-5.9Z" fill="#e4e4e7" stroke="#18181b" stroke-width="2" stroke-linejoin="round" />
+    <circle cx="20" cy="29.5" r="6" fill="#2563eb" stroke="#ffffff" stroke-width="2" />
+  </g>
+  <text x="42" y="39" fill="#18181b"
+    font-family="'Liberation Sans',Inter,system-ui,-apple-system,Arial,Helvetica,sans-serif"
+    font-size="30" font-weight="600" letter-spacing="-0.6">Paperweight</text>
+  <text x="232" y="39" fill="#18181b" fill-opacity="0.55"
+    font-family="'Liberation Sans',Inter,system-ui,-apple-system,Arial,Helvetica,sans-serif"
+    font-size="18" font-weight="600" letter-spacing="1.1">PDF</text>
+</svg>

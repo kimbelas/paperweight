@@ -487,6 +487,17 @@ wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
   browser will keep running the previous engine.
 - After changing anything in `src/offline/`, run `pnpm build` — `build:sw`
   reads the finished `out/`, so it cannot run before the build it describes.
+- **Branches are named for what the change is, not who made it.**
+  `<type>/<kebab-case-description>`, where the type is one of `feat`, `fix`,
+  `docs`, `chore`, `refactor`, `test`, `perf` or `hotfix` — the Conventional
+  Branch names, chosen because they are the ones tooling and reviewers
+  already expect. `chore/custom-domain`, `fix/field-type-size`.
+
+  Not `<username>/<thing>`. Every branch here is by the same person, so the
+  name spent a prefix on the one fact that is never in question and left the
+  reader to guess whether `kimbelas/split-forms` was a feature, a bug or a
+  refactor. The type is the part that is worth reading in a branch list.
+
 - The browser suites run in Chromium, Firefox and WebKit. Add
   `--project=webkit` to run one; CI runs the three as parallel jobs against a
   single build, so a failure names the engine. Edge is Chromium and is not run
