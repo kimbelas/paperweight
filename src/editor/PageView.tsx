@@ -1131,7 +1131,7 @@ export function PageView({
           // is cut off in the file. A field the engine will draw into the page
           // instead does not clip, so there is nothing to widen and nothing to
           // warn about.
-          resizable={editTarget.field.editable && editTarget.field.clips}
+          widenable={editTarget.field.editable && editTarget.field.clips}
           maxWidth={page.width - 6 - editTarget.field.rect.left}
           transform={transform}
           zoom={zoom}

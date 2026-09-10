@@ -39,7 +39,7 @@ import { pdfRectToCss, type PageTransform } from './transform';
  * field magnified three times is wider than a phone, so focusing it dragged
  * the whole document sideways and left the form's own labels off the screen.
  * The width is the one dimension that has to stay honest anyway — it is what
- * the resize handle sets and what a value is clipped by.
+ * "Widen to fit" sets and what a value is clipped by.
  *
  * The value is therefore no longer as wide, relative to its box, as the page
  * will draw it, so the overflow question cannot be asked of the input any
@@ -67,18 +67,24 @@ interface InlineTextEditorProps {
   transform: PageTransform;
   zoom: number;
   /**
-   * Let the box be widened by dragging its right edge.
+   * Offer to widen the box, and warn when the value will not fit it.
    *
-   * Only a form field can do this. A field clips its own appearance to its
+   * Only a form field can do either. A field clips its own appearance to its
    * rectangle, so a value wider than the box is cut off in the file itself,
    * and the width is a property of the document rather than of the view. A
    * line of page text has no such box: it simply runs on.
+   *
+   * The width is set by "Widen to fit" and by nothing else. The right edge
+   * used to be draggable as well, and it was the wrong control for what it
+   * did: the value has exactly one width that is correct — the one that holds
+   * it — and a drag is an invitation to find that width by eye, on a box a
+   * few pixels tall, against type the editor may have floored for touch. It
+   * never landed on the right answer, and every miss is a document that
+   * either still clips or has a field visibly wider than its neighbours.
    */
-  resizable?: boolean;
+  widenable?: boolean;
   /** Widest the box may become, in points. Stops it running off the page. */
   maxWidth?: number;
-  /** Narrowest useful box, in points. */
-  minWidth?: number;
   /** The committed width, in points, when it was changed. */
   onCommit: (text: string, width?: number) => void | Promise<void>;
   onCancel: () => void;
@@ -96,9 +102,8 @@ export function InlineTextEditor({
   hint,
   transform,
   zoom,
-  resizable,
+  widenable,
   maxWidth,
-  minWidth = 24,
   onCommit,
   onCancel,
 }: InlineTextEditorProps) {
@@ -109,9 +114,8 @@ export function InlineTextEditor({
   const coarse = useMediaQuery(COARSE_POINTER);
 
   const originalWidth = bounds.right - bounds.left;
-  /** Width in points. Undefined until the user actually changes it. */
+  /** Width in points. Undefined until "Widen to fit" sets one. */
   const [width, setWidth] = useState<number | null>(null);
-  const [resizing, setResizing] = useState(false);
   const [clipped, setClipped] = useState(false);
 
   useLayoutEffect(() => {
@@ -122,8 +126,8 @@ export function InlineTextEditor({
   }, []);
 
   const shownWidth = width ?? originalWidth;
-  // The editor is drawn at the width being edited, so dragging the handle
-  // shows the box the value will actually get.
+  // The editor is drawn at the width being applied, so widening it shows the
+  // box the value will actually get.
   const box = pdfRectToCss(transform, { ...bounds, right: bounds.left + shownWidth });
 
   /** The size the page draws this line at, in CSS pixels. */
@@ -148,23 +152,25 @@ export function InlineTextEditor({
    * value is committed.
    */
   useLayoutEffect(() => {
-    if (!resizable) return;
+    if (!widenable) return;
     const probe = probeRef.current;
     if (!probe) return;
     setClipped(probe.getBoundingClientRect().width > box.width + 1);
-  }, [value, resizable, box.width]);
+  }, [value, widenable, box.width]);
 
-  const clampWidth = (points: number): number => {
-    const ceiling = maxWidth ?? Number.POSITIVE_INFINITY;
-    return Math.min(Math.max(points, minWidth), ceiling);
-  };
-
-  /** Widen just enough for the text as it is currently laid out. */
+  /**
+   * Widen just enough for the text as it is currently laid out.
+   *
+   * Measured off the probe, so it is the width the *page* needs rather than
+   * the width the input is showing, and capped so a field can never be
+   * widened off the edge of the page. It only ever grows the box: the button
+   * appears only when the value already overruns it.
+   */
   const fitToText = () => {
     const probe = probeRef.current;
     if (!probe) return;
     const needed = (probe.getBoundingClientRect().width + 4) / scale;
-    setWidth(clampWidth(Math.ceil(needed)));
+    setWidth(Math.min(Math.ceil(needed), maxWidth ?? Number.POSITIVE_INFINITY));
     inputRef.current?.focus();
   };
 
@@ -267,60 +273,6 @@ export function InlineTextEditor({
         onBlur={() => void submit()}
       />
 
-      {resizable && (
-        <>
-          {/*
-            The right edge, draggable. `preventDefault` on pointer down is
-            load-bearing: without it the press moves focus out of the input,
-            the blur handler commits, and the editor closes the instant a
-            resize begins.
-          */}
-          <div
-            role="separator"
-            aria-label="Drag to change the field width"
-            aria-orientation="vertical"
-            title="Drag to widen the field so long values are not cut off"
-            className="absolute"
-            style={{
-              top: 0,
-              bottom: 0,
-              right: -4,
-              width: 10,
-              cursor: 'ew-resize',
-              background: resizing ? 'var(--app-accent)' : 'transparent',
-              borderRight: `3px solid var(--app-accent)`,
-              opacity: resizing ? 1 : 0.8,
-            }}
-            onPointerDown={(event) => {
-              event.preventDefault();
-              event.stopPropagation();
-
-              const startX = event.clientX;
-              const startWidth = shownWidth;
-              const handle = event.currentTarget;
-              handle.setPointerCapture(event.pointerId);
-              setResizing(true);
-
-              const move = (moveEvent: PointerEvent) => {
-                setWidth(clampWidth(startWidth + (moveEvent.clientX - startX) / scale));
-              };
-              const done = () => {
-                setResizing(false);
-                handle.releasePointerCapture(event.pointerId);
-                handle.removeEventListener('pointermove', move);
-                handle.removeEventListener('pointerup', done);
-                handle.removeEventListener('pointercancel', done);
-                inputRef.current?.focus();
-              };
-
-              handle.addEventListener('pointermove', move);
-              handle.addEventListener('pointerup', done);
-              handle.addEventListener('pointercancel', done);
-            }}
-          />
-        </>
-      )}
-
       {/*
         Anchored above the box rather than at a fixed offset, and allowed to
         wrap: on a phone the hint is wider than the screen, and held on one
@@ -341,16 +293,17 @@ export function InlineTextEditor({
         <span className="pointer-events-none">
           {busy
             ? 'Applying…'
-            : resizing || widthChanged
+            : widthChanged
               ? `${Math.round(shownWidth)} pt wide · ${hint}`
               : hint}
         </span>
 
-        {resizable && clipped && !busy && (
+        {widenable && clipped && !busy && (
           <button
             type="button"
-            // Same reason as the drag handle: keep focus in the input so the
-            // blur handler does not commit before the width is applied.
+            // `preventDefault` on pointer down is load-bearing: without it the
+            // press moves focus out of the input, the blur handler commits,
+            // and the editor closes before the width is ever applied.
             onPointerDown={(event) => event.preventDefault()}
             onClick={fitToText}
             className="rounded px-1 font-semibold underline"
@@ -362,7 +315,7 @@ export function InlineTextEditor({
         )}
       </div>
 
-      {resizable && clipped && !busy && (
+      {widenable && clipped && !busy && (
         <div
           className="pointer-events-none absolute rounded px-1.5 py-0.5 text-[11px]"
           style={{

@@ -94,10 +94,18 @@ the decisions. `docs/research/01-editing-engines.md` and
 - **A field clips to its own rectangle, so its width is part of the
   document.** A value wider than the box is cut off in the file — on screen
   and on paper alike, and silently, since the stored `/V` is complete while
-  the appearance is truncated. That is why the field editor can be resized by
-  its right edge and offers "Widen to fit", and why `measureFieldFit` warns
-  when a committed value will not fit. Width is clamped so a field can never
-  be widened off the page.
+  the appearance is truncated. That is why the field editor offers "Widen to
+  fit", and why `measureFieldFit` warns when a committed value will not fit.
+  Width is clamped so a field can never be widened off the page.
+
+  **"Widen to fit" is the only way a width is set.** The right edge was
+  draggable as well and was removed: there is exactly one correct width for a
+  value — the one that holds it — the button computes it from the same probe
+  the cut-off warning measures, and a drag is an invitation to find it by eye,
+  on a box a few pixels tall, against type the editor may have floored for
+  touch. Every miss leaves a document that either still clips or has one field
+  visibly wider than its neighbours. A control that can only be operated
+  correctly by accident is worse than no control.
 
   Two traps in `setFormFieldWidth`. The appearance must be rebuilt after
   `FPDFAnnot_SetRect`, or the stream stays laid out to the old box and the
@@ -110,11 +118,11 @@ the decisions. `docs/research/01-editing-engines.md` and
 
   Only a field that stays a field clips, and `FormFieldInfo.clips` is that
   answer — the same condition as `appearanceIsTrustworthy`, since a value the
-  engine draws into the page instead runs on in full. It gates the drag
-  handle, "Widen to fit" and the cut-off warning together, because on a field
-  that will be redrawn as page text all three describe something the file does
-  not do: the warning fires on a value nothing will cut, and the width the
-  user then sets is discarded by the conversion.
+  engine draws into the page instead runs on in full. It gates "Widen to fit"
+  and the cut-off warning together, because on a field that will be redrawn as
+  page text both describe something the file does not do: the warning fires on
+  a value nothing will cut, and the width the user then sets is discarded by
+  the conversion.
 
 - **Editing a field must never change its type size, and "auto" is never an
   acceptable answer.** A `/DA` of `0 Tf` means "size the type to the box", and
