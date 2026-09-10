@@ -57,6 +57,20 @@ export const FINE_PRINT =
   'Your file is opened here, on this device, and is never sent anywhere. Nothing is kept between visits unless you save it yourself.';
 
 /**
+ * The three things worth knowing before deciding to click, in three words each.
+ *
+ * They are set beside the button as coloured text and nothing else: no pill, no
+ * tick. A green tick is a picture of trustworthiness, and the sentences under
+ * `TRUST` are the evidence — only one of those survives being quoted, so the
+ * short form here is a signpost to the long form rather than a substitute.
+ *
+ * Deliberately not the wording of any `TRUST` label. Those are asserted to
+ * appear exactly once each as exact text, so a claim repeated verbatim up here
+ * would be found twice and the test would be right to fail.
+ */
+export const HERO_CLAIMS = ['Nothing leaves this device', 'No sign-up', 'Free'];
+
+/**
  * Ownership tokens for the search consoles.
  *
  * Both are the bare `content` value of the meta tag the console offers, not
@@ -144,7 +158,25 @@ export const KEYWORDS = [
  * words on the buttons. Each entry keeps the honesty the interface keeps:
  * cover is not redaction, a patched scan is not an edit, a substituted font
  * is announced.
+ *
+ * **This order is the page's order, and the first three are load-bearing.**
+ * The landing page sets the leading three at full width with their prose and
+ * runs the remaining eight underneath as a tighter list, because eleven tools
+ * at one volume is what made the page unreadable. So the three here are the
+ * three the headline already claims — text, signatures, forms — and they are
+ * in that order for the same reason. `tests/e2e/seo.spec.ts` asserts the
+ * page's headings against this array in order, and `structured-data.ts` builds
+ * its `ItemList` from it, so reordering here moves all three together.
  */
+/**
+ * The label over the second tier of the tool list.
+ *
+ * "Also" rather than "More features": the eight below are not a lesser product,
+ * they are the rest of the same toolbar, and the reader is being told where the
+ * list continues rather than sold a longer one.
+ */
+export const FEATURES_MORE_LABEL = 'Also in the toolbar';
+
 export const FEATURES: { label: string; text: string; icon: FeatureIcon }[] = [
   {
     label: 'Edit text',
@@ -152,9 +184,9 @@ export const FEATURES: { label: string; text: string; icon: FeatureIcon }[] = [
     text: 'Click a line and retype it. The font the document already uses is reused when it has the letters; otherwise a close match is used and a badge says so.',
   },
   {
-    label: 'Add text',
-    icon: 'add-text',
-    text: 'Place a new line of text anywhere on the page.',
+    label: 'Signature',
+    icon: 'signature',
+    text: 'Remove a signature that is an annotation, a signature field or an image on the page. Add one by drawing, typing or uploading.',
   },
   {
     label: 'Fill in forms',
@@ -162,9 +194,9 @@ export const FEATURES: { label: string; text: string; icon: FeatureIcon }[] = [
     text: 'Click a field to type into it, tick boxes, choose options. Widen a field when a value will not fit.',
   },
   {
-    label: 'Signature',
-    icon: 'signature',
-    text: 'Remove a signature that is an annotation, a signature field or an image on the page. Add one by drawing, typing or uploading.',
+    label: 'Add text',
+    icon: 'add-text',
+    text: 'Place a new line of text anywhere on the page.',
   },
   {
     label: 'Mark',

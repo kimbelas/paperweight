@@ -169,6 +169,229 @@ body {
   overflow: hidden;
 }
 
+/*
+ * The landing page's section number.
+ *
+ * Tabular figures so `01` through `05` occupy the same width and the rules
+ * beside them start at the same place. There is no card class and no tinted
+ * icon tile here on purpose — see the note in `src/editor/Landing.tsx`.
+ */
+.section-number {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: 'tnum' 1;
+}
+
+/*
+ * Reveal on scroll, in CSS and nothing else.
+ *
+ * `Landing` may not touch a browser API or hold state: it is prerendered under
+ * Node at build time and rendered again in the browser, and the copy has to be
+ * in the static HTML because a crawler with no JavaScript is one of its two
+ * readers. So no IntersectionObserver, no `useEffect`, no library — a
+ * scroll-driven CSS animation, which the browser runs against the scroll
+ * position of the nearest scrollport with no script involved at all.
+ *
+ * The `@supports` guard is the load-bearing part, not politeness. The hidden
+ * start state lives *inside* it, so a browser without scroll-driven animations
+ * — Firefox, measured, and only Firefox: Chromium and WebKit both run these —
+ * never applies `opacity: 0` and simply shows the page. Written the other way
+ * round, with `opacity: 0` in the base rule, Firefox would hold every section
+ * at zero opacity forever and the page would be blank. That is the failure
+ * this project keeps finding: not an error, just nothing, everywhere the
+ * feature is unsupported.
+ *
+ * An element already in view when the page loads sits at the end of its own
+ * timeline, so the hero is never faded in on arrival.
+ */
+@supports (animation-timeline: view()) {
+  @media (prefers-reduced-motion: no-preference) {
+    .reveal {
+      animation: reveal-in linear both;
+      animation-timeline: view();
+      /* Done well before the element is centred, or reading has to wait. */
+      animation-range: entry 0% entry 45%;
+    }
+
+    @keyframes reveal-in {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: none;
+      }
+    }
+  }
+}
+
+/*
+ * The section rail: five dashes down the right edge, the one for the section
+ * you are in extended, coloured and labelled.
+ *
+ * # How it knows, without any script
+ *
+ * Each section declares a named view timeline (`view-timeline-name`), the
+ * landing container hoists those names with `timeline-scope` so an element
+ * outside the sections can reference them, and each rail item drives its
+ * animation from the timeline of the section it stands for. The browser does
+ * the scroll tracking; `Landing` still touches no browser API and holds no
+ * state, which is the rule it has to keep because it is prerendered under Node.
+ *
+ * The lit state is carried by one registered custom property rather than by
+ * animating three things separately: `--rail-on` runs 0 → 1 → 0 across the
+ * section's pass, and the dash reads it for its width and colour while the
+ * label reads it for opacity. Registering it with `@property` is what makes it
+ * interpolate at all — an unregistered custom property animates as a discrete
+ * swap, which would snap rather than fade.
+ *
+ * # Where it works, and what happens where it does not
+ *
+ * Measured rather than assumed, by reading the computed `--rail-on` of every
+ * dash in all three engines: **Chromium and WebKit both drive it** — Safari
+ * shipped scroll-driven animations, so the "Chromium-only" this was first
+ * written as is out of date — and **Firefox reports 0 for every item**.
+ *
+ * So Firefox gets no rail at all, and no gutter reserved for one. A row of
+ * five dashes that never lights up is ornament that does nothing, and the note
+ * in `Landing.tsx` about this page is that nothing on it should be on screen
+ * without a job. Hiding the whole thing — and reclaiming its 144px — is the
+ * consistent answer, which is why both the rail's `display` and the
+ * container's padding live inside the `@supports` guard rather than in the
+ * markup.
+ *
+ * The rail is `aria-hidden`: the sticky "Jump to" strip is the real
+ * navigation, and a second set of links with the same five names would break
+ * every browser spec that resolves them strictly.
+ */
+.rail {
+  display: none;
+}
+
+.rail-dash {
+  display: block;
+  width: 20px;
+  /* 2px, like the reference: a 1px hairline at this length reads as a speck
+     rather than a tick mark, especially on the light theme. */
+  height: 2px;
+  background: var(--app-border-strong);
+}
+
+.rail-label {
+  opacity: 0;
+}
+
+@property --rail-on {
+  syntax: '<number>';
+  inherits: true;
+  initial-value: 0;
+}
+
+@supports (animation-timeline: view()) {
+  /*
+   * Fixed to the viewport's right edge, not to the container's, so it holds
+   * the same place on screen at every width and never drifts inward as the
+   * centred container grows. Out of flow, so it cannot widen the page — the
+   * exact-zero overflow test at seven widths is what confirms that.
+   *
+   * The container still reserves the same width: up to 1440 the content runs
+   * to the viewport edge, so without it the rail would sit on top of the tool
+   * grid and the comparison table.
+   */
+  @media (min-width: 80rem) {
+    .rail {
+      /*
+       * `flex`, not `block`. This rule is more specific than the `flex`
+       * utility on the element, so `block` here silently killed the column:
+       * the items fell back to inline spans and wrapped onto shared lines,
+       * which showed up as dashes scattered at different x positions instead
+       * of one straight edge. The alignment was never wrong — the display
+       * mode was.
+       */
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      position: fixed;
+      top: 38vh;
+      right: 0;
+      width: 9rem;
+    }
+
+    .landing {
+      padding-right: 9rem;
+    }
+  }
+
+  #what-it-does {
+    view-timeline-name: --sec-1;
+  }
+  #how-it-works {
+    view-timeline-name: --sec-2;
+  }
+  #privacy {
+    view-timeline-name: --sec-3;
+  }
+  #questions {
+    view-timeline-name: --sec-4;
+  }
+  #limits {
+    view-timeline-name: --sec-5;
+  }
+
+  .landing {
+    timeline-scope: --sec-1, --sec-2, --sec-3, --sec-4, --sec-5;
+  }
+
+  .rail-item {
+    animation-name: rail-on;
+    animation-fill-mode: both;
+    animation-timing-function: linear;
+    /* A plateau through the middle of each section's pass, so the handover
+       from one dash to the next happens once rather than twice. */
+    animation-range: cover 0% cover 100%;
+  }
+
+  .rail-1 {
+    animation-timeline: --sec-1;
+  }
+  .rail-2 {
+    animation-timeline: --sec-2;
+  }
+  .rail-3 {
+    animation-timeline: --sec-3;
+  }
+  .rail-4 {
+    animation-timeline: --sec-4;
+  }
+  .rail-5 {
+    animation-timeline: --sec-5;
+  }
+
+  @keyframes rail-on {
+    0%,
+    100% {
+      --rail-on: 0;
+    }
+    38%,
+    62% {
+      --rail-on: 1;
+    }
+  }
+
+  .rail-dash {
+    width: calc(20px + var(--rail-on) * 18px);
+    background: color-mix(
+      in srgb,
+      var(--app-border-strong),
+      var(--app-accent) calc(var(--rail-on) * 100%)
+    );
+  }
+
+  .rail-label {
+    opacity: var(--rail-on);
+  }
+}
+
 @media print {
   /* Nothing in the app chrome should ever reach a printer. Printing goes
      through the real PDF in a frame, not through this DOM. */
