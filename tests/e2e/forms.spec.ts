@@ -194,26 +194,31 @@ test('warns that a value too wide for its field will be cut off', async ({ page 
   await expect(page.getByText(/cut off when printed/i)).toHaveCount(0);
 });
 
-test('dragging the right edge widens the field so the value is not clipped', async ({ page }) => {
+/**
+ * The only way a field's width changes.
+ *
+ * The right edge used to be draggable too, and was removed: the value has one
+ * correct width — the one that holds it — and finding it by eye on a box a few
+ * pixels tall is a way of missing it. So this test carries what the drag test
+ * used to prove as well, that a widened field really is wider in the file.
+ */
+test('Widen to fit sizes the field to the value in one click', async ({ page }) => {
   await openApp(page);
   await openForm(page);
 
   expect(await inkIn(page, BEYOND_OLD_EDGE)).toBe(0);
 
   await startEditingSurname(page);
+
   const input = page.getByRole('textbox', { name: /edit this line of text/i });
   await input.fill(LONG_VALUE);
+  await expect(page.getByText(/cut off when printed/i)).toBeVisible();
 
-  const handle = page.getByRole('separator', { name: /drag to change the field width/i });
-  await expect(handle).toBeVisible();
+  await page.getByRole('button', { name: /widen to fit/i }).click();
 
-  const box = (await handle.boundingBox())!;
-  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
-  await page.mouse.down();
-  await page.mouse.move(box.x + box.width / 2 + 260, box.y + box.height / 2, { steps: 12 });
-  await page.mouse.up();
-
-  // The hint reports the width that will be applied.
+  // The warning goes because the box now holds the value, and the hint
+  // reports the width that will be applied.
+  await expect(page.getByText(/cut off when printed/i)).toHaveCount(0);
   await expect(page.getByText(/pt wide/i)).toBeVisible();
 
   await input.press('Enter');
@@ -230,26 +235,6 @@ test('dragging the right edge widens the field so the value is not clipped', asy
   await expect(again).toBeVisible({ timeout: 20_000 });
   await expect(again).toHaveValue(LONG_VALUE);
   await expect(page.getByText(/cut off when printed/i)).toHaveCount(0);
-});
-
-test('Widen to fit sizes the field to the value in one click', async ({ page }) => {
-  await openApp(page);
-  await openForm(page);
-  await startEditingSurname(page);
-
-  const input = page.getByRole('textbox', { name: /edit this line of text/i });
-  await input.fill(LONG_VALUE);
-  await expect(page.getByText(/cut off when printed/i)).toBeVisible();
-
-  await page.getByRole('button', { name: /widen to fit/i }).click();
-
-  // The warning goes because the box now holds the value.
-  await expect(page.getByText(/cut off when printed/i)).toHaveCount(0);
-
-  await input.press('Enter');
-  await expect(input).toHaveCount(0);
-  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 40_000 });
-  await expect.poll(() => inkIn(page, BEYOND_OLD_EDGE), { timeout: 30_000 }).toBeGreaterThan(0);
 });
 
 test('undo puts the field width back', async ({ page }) => {
@@ -506,7 +491,6 @@ test('a field that will not be clipped is not offered a width', async ({ page })
   // something the file does not do.
   await expect(page.getByText(/cut off when printed/i)).toHaveCount(0);
   await expect(page.getByRole('button', { name: /widen to fit/i })).toHaveCount(0);
-  await expect(page.getByRole('separator', { name: /field width/i })).toHaveCount(0);
 
   await input.press('Enter');
   await expect(input).toHaveCount(0);

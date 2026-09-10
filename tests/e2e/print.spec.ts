@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 import { join } from 'node:path';
 import { waitForLanding } from './helpers';
 
@@ -53,7 +53,41 @@ const PAST_THE_DEADLINE_MS = 14_000;
 /** The fallback's own notice, matched as a user would read it. */
 const FALLBACK_NOTICE = /opened in a new tab/i;
 
+/**
+ * Every notice the run raised, whether or not it is still on screen.
+ *
+ * Notices leave on their own after five to ten seconds, and the fallback
+ * fires at the twelve-second deadline — so asking the page what it is showing
+ * at the end of a fourteen-second wait is asking a question whose answer
+ * expires. This watches for them as they appear, which is what the assertion
+ * actually means: not "no notice is up now" but "no notice ever said this".
+ */
+async function recordNotices(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const seen: string[] = [];
+    (window as unknown as Record<string, unknown>).__notices = seen;
+
+    const sweep = () => {
+      for (const p of document.querySelectorAll('[role="status"] p')) {
+        const text = p.textContent?.trim();
+        if (text && !seen.includes(text)) seen.push(text);
+      }
+    };
+
+    new MutationObserver(sweep).observe(document.documentElement, {
+      childList: true,
+      subtree: true,
+      characterData: true,
+    });
+  });
+}
+
+/** What it saw. */
+const noticesSeen = (page: Page): Promise<string[]> =>
+  page.evaluate(() => (window as unknown as { __notices: string[] }).__notices ?? []);
+
 test('printing goes through the frame rather than the fallback', async ({ page }) => {
+  await recordNotices(page);
   await page.addInitScript(() => {
     delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
   });
@@ -87,8 +121,10 @@ test('printing goes through the frame rather than the fallback', async ({ page }
   // headers, that the policy did.
   await expect(frame, 'the print frame was withdrawn, so printing fell back').toHaveCount(1);
 
-  // And no downgrade by either of its visible signs.
-  await expect(page.getByText(FALLBACK_NOTICE)).toHaveCount(0);
-  await expect(page.getByText(/could not be printed/i)).toHaveCount(0);
+  // And no downgrade by either of its visible signs — asked of everything
+  // the run raised, not only of what is still on screen.
+  const notices = await noticesSeen(page);
+  expect(notices.filter((n) => FALLBACK_NOTICE.test(n))).toEqual([]);
+  expect(notices.filter((n) => /could not be printed/i.test(n))).toEqual([]);
   expect(popups, 'printing opened a tab, which is the fallback path').toEqual([]);
 });
