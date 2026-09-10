@@ -52,6 +52,7 @@
     "build:sw": "node scripts/build-sw.mjs",
     "fixtures": "node scripts/make-fixtures.mjs",
     "brand": "node scripts/make-brand.mjs",
+    "shots": "node scripts/make-screenshots.mjs",
     "sync:ocr": "node scripts/sync-ocr.mjs",
     "headers": "node scripts/write-headers.mjs"
   },
