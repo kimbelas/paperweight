@@ -36,7 +36,7 @@
     "dev": "next dev",
     "prebuild": "node scripts/sync-wasm.mjs && node scripts/sync-ocr.mjs && node scripts/build-worker.mjs",
     "build": "next build",
-    "postbuild": "node scripts/write-headers.mjs && node scripts/build-sw.mjs",
+    "postbuild": "node scripts/write-headers.mjs && node scripts/write-robots.mjs && node scripts/build-sw.mjs",
     "start": "next start",
     "preview": "wrangler dev",
     "lint": "next lint",

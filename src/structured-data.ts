@@ -6,6 +6,7 @@ import {
   FAQ,
   FEATURES,
   REPO_URL,
+  SCREENSHOTS,
   SECTIONS,
   SITE_NAME,
   SITE_URL,
@@ -21,6 +22,9 @@ import {
  * appears nowhere on the page is exactly the mismatch this file exists to
  * avoid.
  */
+/** SPDX's canonical URI for the licence in `LICENSE`. */
+const MIT_LICENCE = 'https://spdx.org/licenses/MIT.html';
+
 function heading(id: string): string {
   return SECTIONS.find((section) => section.id === id)?.heading ?? SITE_NAME;
 }
@@ -38,9 +42,17 @@ function heading(id: string): string {
  * compares the two, because structured data that contradicts the visible page
  * is worse than none: it is the one thing a search engine will penalise.
  *
- * There is deliberately no `license`. The repository has no LICENCE file yet,
- * and claiming a licence in metadata that the source does not grant would be
- * a false statement about someone else's rights.
+ * Every node hangs off the page. Four of them used to float free — the FAQ,
+ * the procedure, the feature list and the source — each a valid island that
+ * nothing pointed at, so a consumer could read one and still not know it
+ * described *this* URL. `hasPart`, `mainEntityOfPage` and `isPartOf` say so.
+ *
+ * What is deliberately absent is `aggregateRating`. Google requires it, or a
+ * `review`, before a `SoftwareApplication` is eligible for a rich result, so
+ * this node will not win one — and a rating a project awards itself is the
+ * self-serving markup that earns a manual action. The node stays for entity
+ * understanding, and the rich result is forgone until somebody else reviews
+ * this.
  */
 export function structuredData(): Record<string, unknown> {
   const site = `${SITE_URL}/`;
@@ -65,29 +77,52 @@ export function structuredData(): Record<string, unknown> {
         '@id': author,
         name: AUTHOR.name,
         url: AUTHOR.url,
+        sameAs: [REPO_URL],
       },
       {
         // The page itself, as distinct from the site and from the product.
         // It carries the dates — a consumer deciding whether a description is
         // current looks for `dateModified`, and its absence reads as unknown
         // rather than as unchanged — and it names the two elements worth
-        // reading aloud or lifting whole: the headline, and the paragraph
-        // under it that defines what this is.
-        '@type': 'WebPage',
+        // reading aloud or lifting whole.
+        //
+        // Co-typed `FAQPage`, because the questions are on this page rather
+        // than on a page of their own. As its own node the FAQ was an island:
+        // valid, and attached to nothing that said which URL it described.
+        // Google stopped showing FAQ rich results in May 2026, so this earns
+        // no listing — Bing and the answer engines still read it, and it
+        // costs nothing, being built from the array the page renders.
+        //
+        // No `speakable`: it is beta and limited to news publishers serving
+        // US English. A property that cannot apply is a claim to be something
+        // this is not.
+        '@type': ['WebPage', 'FAQPage'],
         '@id': `${SITE_URL}/#webpage`,
         url: site,
         name: TITLE,
         description: DESCRIPTION,
         isPartOf: { '@id': `${SITE_URL}/#website` },
         about: { '@id': app },
-        primaryImageOfPage: image,
+        // `primaryImageOfPage` takes an `ImageObject`, not a URL — unlike
+        // `image`, which takes either. A bare string here is a type error
+        // that reads as "no primary image".
+        primaryImageOfPage: {
+          '@type': 'ImageObject',
+          '@id': `${SITE_URL}/#ogimage`,
+          url: image,
+          contentUrl: image,
+          width: 1200,
+          height: 630,
+        },
+        hasPart: [{ '@id': `${SITE_URL}/#howto` }, { '@id': `${SITE_URL}/#features` }],
+        mainEntity: FAQ.map((entry) => ({
+          '@type': 'Question',
+          name: entry.question,
+          acceptedAnswer: { '@type': 'Answer', text: entry.answer },
+        })),
         inLanguage: 'en',
         datePublished: CONTENT_PUBLISHED,
         dateModified: CONTENT_UPDATED,
-        speakable: {
-          '@type': 'SpeakableSpecification',
-          cssSelector: ['h1', '#answer'],
-        },
       },
       {
         '@type': ['SoftwareApplication', 'WebApplication'],
@@ -97,16 +132,36 @@ export function structuredData(): Record<string, unknown> {
         description: DESCRIPTION,
         applicationCategory: 'BusinessApplication',
         applicationSubCategory: 'PDF editor',
-        operatingSystem: 'Any (web browser)',
+        // 'All' is the conventional value for something with no platform of
+        // its own. `browserRequirements` carries the real constraint, and is
+        // legal here only because of the `WebApplication` co-type.
+        operatingSystem: 'All',
         browserRequirements: 'Requires JavaScript, WebAssembly and Web Workers',
+        softwareRequirements: 'A browser with WebAssembly and Web Workers',
+        license: MIT_LICENCE,
+        datePublished: CONTENT_PUBLISHED,
+        dateModified: CONTENT_UPDATED,
         isAccessibleForFree: true,
         // Stating a price of zero is what marks it free to a consumer that
         // reads offers rather than prose. Omitting the offer reads as
         // "price unknown".
-        offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' },
+        offers: {
+          '@type': 'Offer',
+          price: '0',
+          priceCurrency: 'USD',
+          availability: 'https://schema.org/InStock',
+          url: site,
+        },
         featureList: FEATURES.map((feature) => `${feature.label}: ${feature.text}`),
         image,
-        screenshot: image,
+        // `screenshot` means a screenshot. It pointed at the share card,
+        // which is a composed graphic and is already what `image` names.
+        screenshot: SCREENSHOTS.map((shot) => ({
+          '@type': 'ImageObject',
+          url: `${SITE_URL}${shot.src}`,
+          contentUrl: `${SITE_URL}${shot.src}`,
+          caption: shot.caption,
+        })),
         inLanguage: 'en',
         author: { '@id': author },
         sameAs: [REPO_URL],
@@ -122,6 +177,8 @@ export function structuredData(): Record<string, unknown> {
         runtimePlatform: 'Web browser',
         targetProduct: { '@id': app },
         author: { '@id': author },
+        license: MIT_LICENCE,
+        isPartOf: { '@id': `${SITE_URL}/#website` },
       },
       {
         // The same three steps the page shows under "How Paperweight works".
@@ -131,6 +188,7 @@ export function structuredData(): Record<string, unknown> {
         // paraphrasing into a shape that puts saving before editing.
         '@type': 'HowTo',
         '@id': `${SITE_URL}/#howto`,
+        mainEntityOfPage: { '@id': `${SITE_URL}/#webpage` },
         name: heading('how-it-works'),
         description: DESCRIPTION,
         inLanguage: 'en',
@@ -151,6 +209,7 @@ export function structuredData(): Record<string, unknown> {
         // form a "what can it do" answer is assembled from.
         '@type': 'ItemList',
         '@id': `${SITE_URL}/#features`,
+        mainEntityOfPage: { '@id': `${SITE_URL}/#webpage` },
         name: heading('what-it-does'),
         numberOfItems: FEATURES.length,
         itemListOrder: 'https://schema.org/ItemListUnordered',
@@ -159,15 +218,6 @@ export function structuredData(): Record<string, unknown> {
           position: index + 1,
           name: feature.label,
           description: feature.text,
-        })),
-      },
-      {
-        '@type': 'FAQPage',
-        '@id': `${SITE_URL}/#faq`,
-        mainEntity: FAQ.map((entry) => ({
-          '@type': 'Question',
-          name: entry.question,
-          acceptedAnswer: { '@type': 'Answer', text: entry.answer },
         })),
       },
     ],

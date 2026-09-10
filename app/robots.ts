@@ -16,14 +16,17 @@ export const dynamic = 'force-static';
  * `/_next/` in particular must stay crawlable — Googlebot renders the page,
  * and a blocked script bundle means it renders a blank one.
  *
- * `Content-Signal` is Cloudflare's declaration format, and this host already
- * serves the preamble that defines it: on a `workers.dev` subdomain Cloudflare
- * prepends its own commentary to whatever we ship, and cannot be turned off
- * there. That preamble carries no directives at all, so it blocks nothing —
- * but it does mean the vocabulary is already introduced by the time a crawler
- * reaches these lines. `ai-train` is deliberately left unstated: under the
- * preamble's own terms that neither grants nor refuses permission, which is an
- * honest description of a decision nobody has made yet.
+ * `Content-Signal` is Cloudflare's declaration format, and the signals only
+ * mean anything alongside the text that defines them. This used to say that
+ * Cloudflare prepends that preamble itself on a `workers.dev` host. It does
+ * not: `curl` the deployed `robots.txt` and what comes back is byte-for-byte
+ * what this file emits, so the site was publishing a directive with no
+ * definition attached. `scripts/write-robots.mjs` now writes the file and
+ * carries the preamble, because a metadata route cannot emit comments.
+ *
+ * `ai-train` is deliberately left unstated: under the signals' own terms that
+ * neither grants nor refuses permission, which is an honest description of a
+ * decision nobody has made yet.
  */
 export default function robots(): MetadataRoute.Robots {
   return {

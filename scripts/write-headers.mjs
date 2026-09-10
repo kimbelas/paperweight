@@ -120,6 +120,29 @@ function headersFile(csp) {
       'X-Frame-Options': 'DENY',
       'Permissions-Policy': 'camera=(), microphone=(), geolocation=()',
     },
+    /*
+     * Keep the workers.dev copies out of search results.
+     *
+     * The Worker answers on its own `workers.dev` name as well as on the
+     * site's domain, and every preview deployment gets one too — the same
+     * bytes at a second and third address, which is a duplicate of the whole
+     * site. The absolute canonical in `src/site.ts` says which one is real,
+     * but a canonical is a hint and a preview URL has no business being a
+     * candidate at all.
+     *
+     * The placeholder syntax is Cloudflare's own, from the "Prevent your
+     * workers.dev URLs showing in search results" example: a `:name`
+     * placeholder matches everything up to the next delimiter, which inside
+     * a host is a dot. So this covers `paperweight.<subdomain>.workers.dev`
+     * and `<version>-paperweight.<subdomain>.workers.dev` alike, and matches
+     * nothing on the custom domain.
+     *
+     * A rule that matches inherits the headers of every other rule that
+     * matches, so these pages still get the policy above.
+     */
+    'https://:version.:subdomain.workers.dev/*': {
+      'X-Robots-Tag': 'noindex',
+    },
   };
 
   let text = '';

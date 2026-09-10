@@ -3,7 +3,6 @@ import { THEME_BOOT_SCRIPT } from '@/editor/theme';
 import {
   AUTHOR,
   DESCRIPTION,
-  KEYWORDS,
   SITE_NAME,
   SITE_URL,
   TITLE,
@@ -43,7 +42,6 @@ export const metadata: Metadata = {
   title: { default: TITLE, template: TITLE_TEMPLATE },
   description: DESCRIPTION,
   applicationName: SITE_NAME,
-  keywords: KEYWORDS,
   authors: [AUTHOR],
   creator: AUTHOR.name,
   publisher: AUTHOR.name,

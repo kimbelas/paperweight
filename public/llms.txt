@@ -77,6 +77,6 @@ Script and Great Vibes fonts under SIL OFL 1.1. No AGPL dependencies.
 
 ## Links
 
-- Paperweight: https://paperweightpdf.com/
-- Source: https://github.com/kimbelas/paperweight
-- Readme: https://raw.githubusercontent.com/kimbelas/paperweight/main/README.md
+- [Paperweight](https://paperweightpdf.com/): the editor itself. Open a PDF and it runs in the tab.
+- [Source](https://github.com/kimbelas/paperweight): MIT licensed. PDFium via WebAssembly in a Web Worker.
+- [Readme](https://raw.githubusercontent.com/kimbelas/paperweight/main/README.md): what it does, the deliberate limits, and how to build and test it.

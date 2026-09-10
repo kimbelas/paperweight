@@ -132,10 +132,49 @@ export const CONTENT_UPDATED_LABEL = '9 September 2026';
 /**
  * What people actually type.
  *
- * These go in `<meta name="keywords">`, which Google has ignored since 2009 —
- * but Bing reads it, and so do several of the crawlers that feed answer
- * engines. It costs one tag.
+ * Not markup. This used to be emitted as `<meta name="keywords">` under a
+ * comment saying that Bing read it — Bing said publicly in 2014 that it does
+ * not, and treats the tag as a spam signal; Google dropped it in 2009 and no
+ * answer engine consults it. The tag is gone and the list stayed, because
+ * the list was never the useless part: it is the set of queries the headline,
+ * the FAQ and the section copy are written to answer, and it belongs
+ * somewhere a person editing that copy will see it.
  */
+/**
+ * Pictures of the application, served from `public/screenshots/`.
+ *
+ * Two consumers, one list. `SoftwareApplication.screenshot` in the structured
+ * data used to point at the Open Graph card, which is a composed graphic
+ * rather than a screenshot and is already what `image` names; and Chrome's
+ * install dialog renders `screenshots` from the web manifest, which had
+ * none, so it offered a bare icon and a title.
+ *
+ * Copies of `docs/screenshots/`, which `pnpm shots` regenerates. They are
+ * copied rather than referenced because `docs/` is not served, and they are
+ * 1280x800 because that is what that script captures — the manifest wants
+ * the real pixel size, and a wrong one is rejected silently.
+ */
+export const SCREENSHOTS: { src: string; caption: string; width: number; height: number }[] = [
+  {
+    src: '/screenshots/edit-text.png',
+    caption: 'Editing a line of text that is already in the PDF, in the browser.',
+    width: 1280,
+    height: 800,
+  },
+  {
+    src: '/screenshots/fill-form.png',
+    caption: 'Filling in a PDF form field, with the value committed through the form itself.',
+    width: 1280,
+    height: 800,
+  },
+  {
+    src: '/screenshots/read-a-scan.png',
+    caption: 'Reading a scanned PDF on the device with OCR, with a confidence score per line.',
+    width: 1280,
+    height: 800,
+  },
+];
+
 export const KEYWORDS = [
   'free PDF editor',
   'edit PDF text',

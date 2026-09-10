@@ -59,7 +59,11 @@ test('the page a crawler receives describes the app', async ({ browser }) => {
       new RegExp(`^${SITE_URL}/?$`),
     );
     await expect(page.locator('meta[name="robots"]')).toHaveAttribute('content', /index/);
-    await expect(page.locator('meta[name="keywords"]')).toHaveAttribute('content', /PDF/i);
+    // No `meta name="keywords"`. Google dropped it in 2009, Bing calls it a
+    // spam signal, and no answer engine reads it. `KEYWORDS` in `site.ts`
+    // survives as the list of queries the copy is written to answer — this
+    // asserts it does not creep back into the head.
+    await expect(page.locator('meta[name="keywords"]')).toHaveCount(0);
 
     // The share card. `og:image` is absolute and points at production even
     // from a local build, which is the point of `metadataBase`: a preview
@@ -195,17 +199,36 @@ test('the page a crawler receives describes the app', async ({ browser }) => {
         Array.isArray(entry['@type']) ? entry['@type'].includes(type) : entry['@type'] === type,
       );
 
-    // The dates, and the two elements worth reading aloud. The selectors have
-    // to resolve on the page above, or they describe a page that is not this
-    // one.
+    // The page node carries the dates, is co-typed as the FAQ, and points at
+    // the parts. No `speakable`: it is beta and limited to news publishers,
+    // so it could only ever have been a claim to be something this is not.
     const webPage = node('WebPage') as unknown as {
+      '@type': string[];
       dateModified: string;
-      speakable: { cssSelector: string[] };
+      speakable?: unknown;
+      hasPart: { '@id': string }[];
+      primaryImageOfPage: { '@type': string; url: string };
     };
     expect(webPage.dateModified).toBe(CONTENT_UPDATED);
-    for (const selector of webPage.speakable.cssSelector) {
-      await expect(page.locator(selector)).toHaveCount(1);
+    expect(webPage.speakable).toBeUndefined();
+    expect(webPage['@type']).toContain('FAQPage');
+
+    // `primaryImageOfPage` takes an ImageObject, not a URL. A bare string
+    // validates as "no primary image", which is the silent kind of wrong.
+    expect(webPage.primaryImageOfPage['@type']).toBe('ImageObject');
+
+    // Every node hangs off the page. These four used to be islands: valid,
+    // and attached to nothing that said which URL they described.
+    const ids = webPage.hasPart.map((part) => part['@id']);
+    expect(ids).toEqual(expect.arrayContaining([`${SITE_URL}/#howto`, `${SITE_URL}/#features`]));
+    for (const type of ['HowTo', 'ItemList']) {
+      const part = node(type) as unknown as { mainEntityOfPage: { '@id': string } };
+      expect(part.mainEntityOfPage['@id'], `${type} is not attached to the page`).toBe(
+        `${SITE_URL}/#webpage`,
+      );
     }
+    const source = node('SoftwareSourceCode') as unknown as { isPartOf: { '@id': string } };
+    expect(source.isPartOf['@id']).toBe(`${SITE_URL}/#website`);
 
     // A procedure stated as a procedure, in the page's own order and words.
     const howTo = node('HowTo') as unknown as {
@@ -222,7 +245,9 @@ test('the page a crawler receives describes the app', async ({ browser }) => {
     );
 
     // Structured data that contradicts the visible page is worse than none.
-    const faqNode = graph['@graph'].find((node) => node['@type'] === 'FAQPage') as unknown as {
+    // Found through the type-aware helper: the FAQ is a second type on the
+    // page node now, so a strict `=== 'FAQPage'` finds nothing.
+    const faqNode = node('FAQPage') as unknown as {
       mainEntity: { name: string; acceptedAnswer: { text: string } }[];
     };
     expect(faqNode.mainEntity.map((q) => q.name)).toEqual(FAQ.map((entry) => entry.question));

@@ -1,5 +1,5 @@
 import type { MetadataRoute } from 'next';
-import { DESCRIPTION, SITE_NAME } from '@/site';
+import { DESCRIPTION, SCREENSHOTS, SITE_NAME } from '@/site';
 
 /**
  * Required by `output: 'export'`: a metadata route is a route handler, and the
@@ -37,6 +37,18 @@ export default function manifest(): MetadataRoute.Manifest {
     background_color: '#f4f4f5',
     theme_color: '#ffffff',
     categories: ['productivity', 'utilities'],
+    // Chrome's install dialog renders these; without them it offers a bare
+    // icon and a title, which is the least persuasive form of the prompt.
+    // `form_factor: 'wide'` is what marks them as the desktop set — omit it
+    // and Chrome treats them as narrow, then declines to use them on a
+    // desktop because the aspect ratio is wrong for a phone.
+    screenshots: SCREENSHOTS.map((shot) => ({
+      src: shot.src,
+      sizes: `${shot.width}x${shot.height}`,
+      type: 'image/png',
+      form_factor: 'wide' as const,
+      label: shot.caption,
+    })),
     icons: [
       { src: '/icon.svg', sizes: 'any', type: 'image/svg+xml' },
       { src: '/icons/icon-192.png', sizes: '192x192', type: 'image/png' },
