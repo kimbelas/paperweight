@@ -377,14 +377,15 @@ test('a section title stays put while its content scrolls', async ({ page }) => 
       held.navBottom - 1,
     );
 
-    // Below `xl` it has to sit against the strip, give or take the reserve it
-    // keeps for a second line of it: flush when the strip wraps, and one
-    // reserve clear when it does not. More than that means the strip has grown
-    // and the reserve has not. From `xl` the title is a grid item with its own
-    // 4.5rem offset, deliberately clear of the nav, so this does not apply.
+    // Below `xl` it has to sit under the strip, give or take what it reserves
+    // for a second line of it plus its breathing room: about 16px clear when
+    // the strip wraps, about 40px when it does not. Much more than that means
+    // the strip has grown and the reserve has not. From `xl` the title is a
+    // grid item with its own 4.5rem offset, deliberately clear of the nav, so
+    // this does not apply.
     if (width < 1280) {
       expect(held.headingTop, `title floats below the nav at ${width}px`).toBeLessThanOrEqual(
-        held.navBottom + 26,
+        held.navBottom + 44,
       );
     }
   }

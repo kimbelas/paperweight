@@ -210,9 +210,10 @@ body {
  * So the title sticks at the strip's *short* height and reserves the
  * difference as padding. When the strip wraps it covers that padding, being
  * opaque and above; when it does not, the reserve is the title's own
- * background and reads as space. `margin-block-start` cancels the padding in
- * flow, so the resting layout is exactly what it was. One measured number,
- * and its failure is slack rather than a heading tucked behind the nav.
+ * background and reads as space. `margin-block-start` gives the reserve back
+ * in flow, so the resting layout keeps only the breathing room added below.
+ * One measured number, and its failure is slack rather than a heading tucked
+ * behind the nav.
  *
  * `seo.spec.ts` measures the pinned title against the strip in all three
  * engines, so a longer label fails a test rather than going unnoticed.
@@ -226,10 +227,23 @@ body {
     position: sticky;
     /* The strip on one line. */
     top: 42px;
-    /* What a second line of it adds, reserved and then given back. */
-    padding-block-start: 24px;
+    /*
+     * 24px is what a second line of the strip adds, reserved for it to cover.
+     * The remaining 16px is breathing room, and it is not optional: with the
+     * reserve alone a held title sits directly against the strip's rule with
+     * its ascenders touching it, which was reported as looking wrong on a
+     * phone before anything else about it.
+     */
+    padding-block-start: 40px;
+    /*
+     * Only the reserve is given back, so the extra 16px is space above the
+     * heading at rest as well. Compensating all of it would need more than the
+     * section's own 32px of top padding and would pull the title's background
+     * over the rule the section starts with.
+     */
     margin-block-start: -24px;
-    padding-block-end: 0.5rem;
+    /* And room under it, or content slides up against the heading's baseline. */
+    padding-block-end: 1rem;
     /* Over the content passing beneath, under the strip's own z-10. */
     z-index: 5;
     /* Opaque, or the content shows through the held title. */
