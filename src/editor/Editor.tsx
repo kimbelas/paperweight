@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { CommitResult, FormFieldInfo, PageInfo } from '@/engine/types';
 import {
   canSaveInPlace,
@@ -23,6 +23,7 @@ import {
 import type { OcrLine } from '@/ocr/recognise';
 import { useOcr } from '@/ocr/useOcr';
 import { Landing } from './Landing';
+import { useMediaQuery } from './media';
 import { Notices } from './Notices';
 import { PageView } from './PageView';
 import { ShortcutsDialog } from './ShortcutsDialog';
@@ -1165,27 +1166,10 @@ function describe(error: unknown, fallback: string): string {
  * The width below which the rails become drawers.
  *
  * 900px is where the two rails — 248 of tools, 178 of pages — stop leaving a
- * usable column for the document between them. It is a media query rather
- * than a resize listener because the browser already knows the answer, and
- * `useSyncExternalStore` reads it during the first render, so a phone never
- * paints the desktop arrangement before correcting itself.
- *
- * `Editor` is loaded with `ssr: false`, so there is no server snapshot to
- * disagree with; the third argument exists only because the signature
- * requires one.
+ * usable column for the document between them.
  */
 const NARROW_QUERY = '(max-width: 899px)';
 
-function subscribeNarrow(onChange: () => void): () => void {
-  const query = window.matchMedia(NARROW_QUERY);
-  query.addEventListener('change', onChange);
-  return () => query.removeEventListener('change', onChange);
-}
-
 function useNarrow(): boolean {
-  return useSyncExternalStore(
-    subscribeNarrow,
-    () => window.matchMedia(NARROW_QUERY).matches,
-    () => false,
-  );
+  return useMediaQuery(NARROW_QUERY);
 }

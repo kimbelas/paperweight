@@ -296,6 +296,81 @@ describe('editing a form field', () => {
     expect(fit.fits).toBe(true);
   });
 
+  /**
+   * The size a field reports, and what reads it.
+   *
+   * A widget's box height says nothing about its type size: a 24pt-tall field
+   * on a form set in 9pt is ordinary, and `autosize-field.pdf` is exactly
+   * that. The size therefore has to be answered from the document, and it has
+   * to be answered once — it decides what PDFium is told to draw at, what the
+   * fit is measured at, and what the interface puts in front of the user, and
+   * any of the three disagreeing is a field that measures as one size and
+   * draws as another.
+   *
+   * Reported as a preview that swelled: clicking a 9pt value opened an editor
+   * showing it at 14pt, and "Widen to fit" then sized the box to that.
+   */
+  it('reports the size the value is drawn at, not the height of its box', async () => {
+    const field = await withFixture('autosize-field.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Surname')!,
+    );
+
+    // The appearance stream draws at 9pt in a box 24pt tall.
+    expect(field.rect.top - field.rect.bottom).toBeCloseTo(24, 1);
+    expect(field.textSize).toBe(9);
+  });
+
+  it('reports the size the document declares, when it declares one', async () => {
+    const field = await withFixture('filled-form.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Surname')!,
+    );
+
+    expect(field.textSize).toBe(11);
+  });
+
+  it('reports the neighbours’ size for a field with no appearance of its own', async () => {
+    const field = await withFixture('autosize-no-appearance.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Surname')!,
+    );
+
+    expect(field.textSize).toBe(9);
+  });
+
+  it('says whether the field clips its value', async () => {
+    // Auto-sized: the engine will draw this one into the page, where text
+    // runs on, so nothing is cut off however long the value.
+    const auto = await withFixture('autosize-field.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Surname')!,
+    );
+    expect(auto.clips).toBe(false);
+
+    // Explicitly sized: it stays a field, and a field clips to its rectangle.
+    const declared = await withFixture('filled-form.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Surname')!,
+    );
+    expect(declared.clips).toBe(true);
+  });
+
+  it('measures the fit at the drawn size, not at the size of the box', async () => {
+    const fit = await withFixture('autosize-field.pdf', async (doc) =>
+      measureFieldFit(doc, formFieldByName(doc, 0, 'Surname')!, 'BELASdsadasdsadsa'),
+    );
+
+    // Seventeen characters of 9pt Helvetica come to about 87pt. Measured
+    // against the box instead the size came out at 15.8pt and the width at
+    // half again as much, which is what every reported width was wrong by.
+    expect(fit.textWidth).toBeGreaterThan(70);
+    expect(fit.textWidth).toBeLessThan(105);
+  });
+
+  it('never reports a value as cut off when the field does not clip', async () => {
+    const fit = await withFixture('autosize-field.pdf', async (doc) =>
+      measureFieldFit(doc, formFieldByName(doc, 0, 'Surname')!, 'BELAS'.repeat(60)),
+    );
+
+    expect(fit.fits).toBe(true);
+  });
+
   it('keeps the size the field is drawn at, rather than resolving auto to the box', async () => {
     // `autosize-field.pdf` has /DA "0 Tf" -- auto -- and an appearance stream
     // that draws at 9pt. Editing rebuilds the appearance from /DA, and auto

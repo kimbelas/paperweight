@@ -2,6 +2,7 @@
 
 import { useLayoutEffect, useRef, useState } from 'react';
 import type { Rect, Rgba } from '@/engine/types';
+import { useMediaQuery } from './media';
 import { pdfRectToCss, type PageTransform } from './transform';
 
 /**
@@ -19,6 +20,36 @@ import { pdfRectToCss, type PageTransform } from './transform';
  * sources — real text objects and lines recovered from a scan by OCR — which
  * share no type. Everything it needs is geometry, size and colour.
  */
+
+/**
+ * Smallest the editor's type is drawn at on a touch screen, in CSS pixels.
+ *
+ * Sitting at the document's own size is right on a desktop and unusable on a
+ * phone: a 9pt field at the 56% zoom that fits a page to a 390px screen is
+ * six pixels of type in a six-pixel box. Tapping a field looked like nothing
+ * had happened at all — the editor was open, focused and selected, and simply
+ * too small to see.
+ *
+ * 16px rather than merely bigger, because that is also the size below which
+ * mobile Safari zooms the whole viewport in when an input takes focus. Under
+ * the floor the page lurched; over it, it does not.
+ *
+ * The box grows in *height* to hold the larger type and keeps the document's
+ * width. Scaling the width too was the obvious thing and it is wrong: a 210pt
+ * field magnified three times is wider than a phone, so focusing it dragged
+ * the whole document sideways and left the form's own labels off the screen.
+ * The width is the one dimension that has to stay honest anyway — it is what
+ * the resize handle sets and what a value is clipped by.
+ *
+ * The value is therefore no longer as wide, relative to its box, as the page
+ * will draw it, so the overflow question cannot be asked of the input any
+ * more. `probeRef` answers it instead: the same string, laid out in the same
+ * face at the *document's* size, off to one side and hidden.
+ */
+const MIN_TOUCH_TYPE_PX = 16;
+
+/** A finger rather than a mouse, so there is a soft keyboard in play. */
+const COARSE_POINTER = '(pointer: coarse)';
 
 interface InlineTextEditorProps {
   text: string;
@@ -72,8 +103,10 @@ export function InlineTextEditor({
   onCancel,
 }: InlineTextEditorProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
+  const probeRef = useRef<HTMLSpanElement | null>(null);
   const [value, setValue] = useState(text);
   const [busy, setBusy] = useState(false);
+  const coarse = useMediaQuery(COARSE_POINTER);
 
   const originalWidth = bounds.right - bounds.left;
   /** Width in points. Undefined until the user actually changes it. */
@@ -93,25 +126,33 @@ export function InlineTextEditor({
   // shows the box the value will actually get.
   const box = pdfRectToCss(transform, { ...bounds, right: bounds.left + shownWidth });
 
+  /** The size the page draws this line at, in CSS pixels. */
+  const pageType = fontSize * zoom;
+  /** The size the editor draws it at: the same, unless it is too small to use. */
+  const typeSize = coarse ? Math.max(pageType, MIN_TOUCH_TYPE_PX) : pageType;
+  /** Extra height the larger type needs. The width is left alone; see above. */
+  const grow = Math.max(0, typeSize - pageType);
+
   /** CSS pixels per PDF point, taken from the box itself. */
   const scale = box.width / Math.max(shownWidth, 0.001);
 
   /**
    * Does the value overrun the box?
    *
-   * Measured from the input's own scroll width, which is the width of the
-   * text as actually laid out in the preview face. That face is metric
-   * compatible with the base-14 font a form's `/DA` almost always names, so
-   * it answers the question the user is asking -- will this be cut off --
-   * without a round trip to the engine on every keystroke. The engine still
-   * has the last word when the value is committed.
+   * Measured from a hidden copy laid out at the size the *page* draws, which
+   * is the width the question is about — the visible input may be showing
+   * larger type on a touch screen. The face is metric compatible with the
+   * base-14 font a form's `/DA` almost always names, so it answers what the
+   * user is asking — will this be cut off — without a round trip to the
+   * engine on every keystroke. The engine still has the last word when the
+   * value is committed.
    */
   useLayoutEffect(() => {
     if (!resizable) return;
-    const input = inputRef.current;
-    if (!input) return;
-    setClipped(input.scrollWidth > input.clientWidth + 1);
-  }, [value, shownWidth, resizable, zoom]);
+    const probe = probeRef.current;
+    if (!probe) return;
+    setClipped(probe.getBoundingClientRect().width > box.width + 1);
+  }, [value, resizable, box.width]);
 
   const clampWidth = (points: number): number => {
     const ceiling = maxWidth ?? Number.POSITIVE_INFINITY;
@@ -120,16 +161,16 @@ export function InlineTextEditor({
 
   /** Widen just enough for the text as it is currently laid out. */
   const fitToText = () => {
-    const input = inputRef.current;
-    if (!input) return;
-    const needed = (input.scrollWidth + 4) / scale;
+    const probe = probeRef.current;
+    if (!probe) return;
+    const needed = (probe.getBoundingClientRect().width + 4) / scale;
     setWidth(clampWidth(Math.ceil(needed)));
-    input.focus();
+    inputRef.current?.focus();
   };
 
   // A little breathing room so ascenders and descenders of the replacement
   // are not clipped by the patch, and so the patch fully covers the original.
-  const pad = Math.max(2, fontSize * zoom * 0.18);
+  const pad = Math.max(2, typeSize * 0.18);
 
   const widthChanged = width !== null && Math.round(width) !== Math.round(originalWidth);
 
@@ -147,14 +188,18 @@ export function InlineTextEditor({
     }
   };
 
+  /** The editor's own height: the line's, plus whatever larger type needs. */
+  const height = box.height + grow + pad * 2;
+
   return (
     <div
       className="absolute"
       style={{
         left: box.left - pad,
-        top: box.top - pad,
+        // Grown about its own middle, so the line stays where it was pointed at.
+        top: box.top - pad - grow / 2,
         width: Math.max(box.width + pad * 2, 32),
-        height: box.height + pad * 2,
+        height,
       }}
     >
       {/* The patch hiding the original line. */}
@@ -163,20 +208,43 @@ export function InlineTextEditor({
         style={{ background: '#ffffff', outline: '1.5px solid var(--app-accent)' }}
       />
 
+      {/*
+        The value at the size the page draws it, for measuring only. Kept out
+        of the accessibility tree and out of the way: what it is for is the
+        width the document would give this string, which the visible input
+        stops reporting the moment its type is floored for touch.
+      */}
+      <span
+        ref={probeRef}
+        aria-hidden
+        className="pointer-events-none absolute whitespace-pre"
+        style={{
+          visibility: 'hidden',
+          left: 0,
+          top: 0,
+          fontSize: pageType,
+          fontFamily: cssFontFamily({ serif, mono }),
+          fontWeight: bold ? 700 : 400,
+          fontStyle: italic ? 'italic' : 'normal',
+        }}
+      >
+        {value}
+      </span>
+
       <input
         ref={inputRef}
         className="text-edit-input absolute inset-0"
         style={{
           paddingLeft: pad,
           paddingRight: pad,
-          fontSize: fontSize * zoom,
+          fontSize: typeSize,
           fontFamily: cssFontFamily({ serif, mono }),
           fontWeight: bold ? 700 : 400,
           fontStyle: italic ? 'italic' : 'normal',
           color: `rgba(${colour.r}, ${colour.g}, ${colour.b}, ${colour.a / 255})`,
           // The box is the ink height plus padding; matching line-height to it
           // keeps the caret and text vertically where the original sat.
-          lineHeight: `${box.height + pad * 2}px`,
+          lineHeight: `${height}px`,
           opacity: busy ? 0.5 : 1,
         }}
         value={value}
@@ -253,9 +321,22 @@ export function InlineTextEditor({
         </>
       )}
 
+      {/*
+        Anchored above the box rather than at a fixed offset, and allowed to
+        wrap: on a phone the hint is wider than the screen, and held on one
+        line it ran off the right-hand edge with the half that says what Enter
+        does out of sight.
+      */}
       <div
-        className="absolute flex items-center gap-1.5 whitespace-nowrap rounded px-1.5 py-0.5 text-[11px]"
-        style={{ top: -22, left: 0, background: 'var(--app-accent)', color: '#fff' }}
+        className="absolute flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]"
+        style={{
+          bottom: '100%',
+          left: 0,
+          marginBottom: 4,
+          maxWidth: 'min(80vw, 460px)',
+          background: 'var(--app-accent)',
+          color: '#fff',
+        }}
       >
         <span className="pointer-events-none">
           {busy
@@ -283,8 +364,15 @@ export function InlineTextEditor({
 
       {resizable && clipped && !busy && (
         <div
-          className="pointer-events-none absolute whitespace-nowrap rounded px-1.5 py-0.5 text-[11px]"
-          style={{ top: box.height + pad * 2 + 4, left: 0, background: '#9a3412', color: '#fff' }}
+          className="pointer-events-none absolute rounded px-1.5 py-0.5 text-[11px]"
+          style={{
+            top: '100%',
+            left: 0,
+            marginTop: 4,
+            maxWidth: 'min(80vw, 460px)',
+            background: '#9a3412',
+            color: '#fff',
+          }}
         >
           Wider than the field — this will be cut off when printed
         </div>

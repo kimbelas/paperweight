@@ -108,9 +108,13 @@ the decisions. `docs/research/01-editing-engines.md` and
   widened box lands outside the widget PDFium still thinks is there, and focus
   fails outright. `doc.invalidatePage` is what re-pairs it.
 
-  An auto-sized field (`0 Tf` in its `/DA`) never clips — PDFium shrinks the
-  type instead — so `measureFieldFit` reports `autoSized` and says nothing
-  about cut-off text. Telling the two apart matters before warning anyone.
+  Only a field that stays a field clips, and `FormFieldInfo.clips` is that
+  answer — the same condition as `appearanceIsTrustworthy`, since a value the
+  engine draws into the page instead runs on in full. It gates the drag
+  handle, "Widen to fit" and the cut-off warning together, because on a field
+  that will be redrawn as page text all three describe something the file does
+  not do: the warning fires on a value nothing will cut, and the width the
+  user then sets is discarded by the conversion.
 
 - **Editing a field must never change its type size, and "auto" is never an
   acceptable answer.** A `/DA` of `0 Tf` means "size the type to the box", and
@@ -119,17 +123,51 @@ the decisions. `docs/research/01-editing-engines.md` and
   own rectangle, and a field clips to its rectangle — so the value comes back
   both huge *and* truncated. Width is the user's to change; size is not.
 
-  `resolveTextSize` answers in four steps and never returns "auto": an
-  explicit `/DA` size is the document's own decision and is left alone; else
-  the size the file's own appearance draws at; else **the median of the sizes
-  the other fields on the page use**, because the neighbours look right so
-  match the neighbours; else a size derived from the box, erring small.
+  `drawnSize` answers in four steps and never returns "auto": an explicit
+  `/DA` size is the document's own decision and is left alone; else the size
+  the file's own appearance draws at; else **the median of the sizes the other
+  fields on the page use**, because the neighbours look right so match the
+  neighbours; else a size derived from the box, erring small.
 
   The third step is the one that matters and its absence was the first fix's
   bug: it read the field's own appearance, found nothing to preserve on a
   field the filler left without an `/AP`, and silently gave up — leaving the
   reported symptom exactly as it was. `autosize-field.pdf` covers the
   has-an-appearance case, `autosize-no-appearance.pdf` the harder one.
+
+  There is **one** answer to that question and everything reads it: `/DA`
+  pinning, drawing the value as page text, measuring the fit, and — through
+  `FormFieldInfo.textSize` — the interface. It used to be three near-copies
+  plus a fourth guess in `PageView`, which took the size from the widget's
+  *height*. A box's height says nothing about its type size: a 24pt-tall field
+  on a form set in 9pt is ordinary, and that guess showed a 9pt value at 14pt.
+  The value appeared to swell the moment it was clicked, "Widen to fit" then
+  sized the box to text half again as wide as the real thing, and
+  `measureFieldFit` had its own version of the same guess at `height * 0.66`.
+  A field that measures as one size and draws as another is the shape of every
+  bug in this area.
+
+- **The inline editor sits at the document's size, with a floor on touch.**
+  `InlineTextEditor` draws over the line at the size the page draws it, which
+  is the whole illusion — and on a phone it is unusable. At the zoom that fits
+  a page to a 390px screen a 9pt field is six pixels of type in a six-pixel
+  box: tapping a field opened an editor that was focused, selected and ready,
+  and looked precisely like nothing having happened. So on a coarse pointer
+  the type is floored at 16px, which is also the size below which mobile
+  Safari zooms the whole viewport in when an input takes focus.
+
+  The box grows in **height** only. Scaling its width to match was the
+  obvious thing and it is wrong: a 210pt field magnified three times is wider
+  than a phone, so focusing it dragged the whole document sideways and left
+  the form's own labels off the screen. Width is also the one dimension that
+  has to stay honest — it is what the resize handle sets and what clips a
+  value.
+
+  So the input no longer reports how wide the value would be on the page, and
+  the `clipped` check cannot ask it. A hidden `probeRef` span holds the same
+  string in the same face at the *document's* size, and both `clipped` and
+  `fitToText` measure that. Desktop is left exactly at the document's size;
+  the floor is for the pointer that has a soft keyboard.
 
 - **When PDFium's appearance cannot be trusted, draw the value yourself.**
   `appearanceIsTrustworthy` is the gate: the document has to declare a size in

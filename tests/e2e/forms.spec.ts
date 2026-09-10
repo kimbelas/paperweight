@@ -439,3 +439,152 @@ test('a form edit survives the round trip to a saved file', async ({ page }) => 
   await expect(saved).toBeVisible({ timeout: 20_000 });
   await expect(saved).toHaveValue('SAVED VALUE');
 });
+
+/**
+ * The editor shows the value at the size the document draws it.
+ *
+ * Reported as "it zooms": clicking a field whose value is drawn at 9pt opened
+ * an editor showing it at 14pt, so the value appeared to swell the moment it
+ * was touched. The editor had been guessing the size from the widget's height,
+ * and a 24pt-tall box on a form set in 9pt is ordinary — the two are
+ * unrelated. Everything measured off that preview inherited the error: the
+ * "this will be cut off" warning fired on values that fit, and "Widen to fit"
+ * sized the box to text half again as wide as the real thing.
+ */
+test('the field editor draws the value at the document’s own size', async ({ page }) => {
+  await openApp(page);
+
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /choose a pdf/i }).click();
+  await (await chooser).setFiles(join(FIXTURES, 'autosize-field.pdf'));
+  await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Rendering…')).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByRole('button', { name: /edit text/i }).click();
+  await clickPdf(page, 320, 652);
+
+  const input = page.getByRole('textbox', { name: /edit this line of text/i });
+  await expect(input).toBeVisible({ timeout: 20_000 });
+  await expect(input).toHaveValue('BELAS');
+
+  // CSS pixels per PDF point, read off the canvas rather than assumed, so the
+  // assertion holds at whatever zoom "fit width" lands on.
+  const { perPoint, typePx } = await page.evaluate(() => {
+    const canvas = document.querySelector('canvas[aria-label="Page 1"]') as HTMLCanvasElement;
+    const field = document.querySelector('.text-edit-input') as HTMLInputElement;
+    return {
+      perPoint: canvas.getBoundingClientRect().width / 612,
+      typePx: parseFloat(getComputedStyle(field).fontSize),
+    };
+  });
+
+  // The document draws this value at 9pt. The old guess from the 24pt box was
+  // 14pt, so anything above about 11 is that bug back.
+  expect(typePx).toBeGreaterThan(8 * perPoint);
+  expect(typePx).toBeLessThan(10.5 * perPoint);
+});
+
+test('a field that will not be clipped is not offered a width', async ({ page }) => {
+  await openApp(page);
+
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /choose a pdf/i }).click();
+  await (await chooser).setFiles(join(FIXTURES, 'autosize-field.pdf'));
+  await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Rendering…')).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByRole('button', { name: /edit text/i }).click();
+  await clickPdf(page, 320, 652);
+
+  const input = page.getByRole('textbox', { name: /edit this line of text/i });
+  await expect(input).toBeVisible({ timeout: 20_000 });
+  await input.fill('BELAS'.repeat(20));
+
+  // This field's value is drawn into the page rather than left in the form,
+  // and page text runs on. Offering to widen a box that will not clip, and
+  // warning about a cut that will not happen, is the interface saying
+  // something the file does not do.
+  await expect(page.getByText(/cut off when printed/i)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: /widen to fit/i })).toHaveCount(0);
+  await expect(page.getByRole('separator', { name: /field width/i })).toHaveCount(0);
+
+  await input.press('Enter');
+  await expect(input).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 40_000 });
+
+  // And the whole value really is in the page, uncut.
+  await clickPdf(page, 300, 652);
+  const again = page.getByRole('textbox', { name: /edit this line of text/i });
+  await expect(again).toBeVisible({ timeout: 20_000 });
+  await expect(again).toHaveValue('BELAS'.repeat(20));
+});
+
+/**
+ * Editing a field on a phone.
+ *
+ * At the zoom that fits a page to a 390px screen, a 9pt field is six pixels
+ * of type in a six-pixel box: tapping it opened an editor that was focused,
+ * selected and ready, and looked exactly like nothing having happened. The
+ * type is floored at 16px on a touch screen — the size below which mobile
+ * Safari also zooms the viewport on focus — and the box grows in height to
+ * hold it.
+ *
+ * In height and not in width: scaling the width too made the box wider than
+ * the screen, and focusing it dragged the whole document sideways with the
+ * form's own labels off the left-hand edge. That is what the last assertion
+ * here is for.
+ */
+test.describe('on a phone', () => {
+  test.use({ viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true });
+
+  test('tapping a field opens an editor you can read', async ({ page }) => {
+    await openApp(page);
+    await openForm(page);
+
+    const canvas = page.locator('canvas[aria-label="Page 1"]');
+    const box = (await canvas.boundingBox())!;
+    await page.touchscreen.tap(
+      box.x + SURNAME_VALUE.x * (box.width / 612),
+      box.y + (792 - SURNAME_VALUE.y) * (box.height / 792),
+    );
+
+    const input = page.getByRole('textbox', { name: /edit this line of text/i });
+    await expect(input).toBeVisible({ timeout: 20_000 });
+    await expect(input).toHaveValue('DOE');
+
+    const shown = await page.evaluate(() => {
+      const field = document.querySelector('.text-edit-input') as HTMLInputElement;
+      const rect = field.getBoundingClientRect();
+      return {
+        typePx: parseFloat(getComputedStyle(field).fontSize),
+        heightPx: rect.height,
+        focused: document.activeElement === field,
+      };
+    });
+
+    // 16px is the floor, and it is the whole point: under it the type cannot
+    // be read and mobile Safari zooms the page out from under the user.
+    expect(shown.typePx).toBeGreaterThanOrEqual(16);
+    expect(shown.heightPx).toBeGreaterThan(16);
+    expect(shown.focused).toBe(true);
+
+    // Typing still reaches it, and the hint stays on the screen rather than
+    // running off the right-hand edge with half of it out of sight.
+    await input.fill('DOE-WHITFIELD');
+    await expect(input).toHaveValue('DOE-WHITFIELD');
+
+    const overhang = await page.evaluate(() => {
+      const hint = [...document.querySelectorAll('div')].find((d) =>
+        d.textContent?.startsWith('Enter to update'),
+      )!;
+      return hint.getBoundingClientRect().right - window.innerWidth;
+    });
+    expect(overhang).toBeLessThanOrEqual(0);
+
+    // And nothing about opening an editor may drag the document sideways.
+    const sideways = await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    );
+    expect(sideways).toBe(0);
+  });
+});

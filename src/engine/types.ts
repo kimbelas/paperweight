@@ -307,6 +307,26 @@ export interface FormFieldInfo {
   editable: boolean;
   /** True when a click should tick it rather than open an editor. */
   toggleable: boolean;
+  /**
+   * The size the value is really drawn at, in points. Never "auto".
+   *
+   * A widget's box height says nothing about its type size — a 24pt-tall
+   * field on a form set in 9pt is ordinary — so anything drawing or measuring
+   * the value has to be told. The interface used to guess from the box and
+   * showed a 9pt value at 14pt: the value appeared to swell the moment it was
+   * clicked, and every width measured off that preview was half as big again
+   * as it should have been.
+   */
+  textSize: number;
+  /**
+   * True when the value is cut off at the edge of the widget's rectangle.
+   *
+   * Only a field the engine will leave as a field clips. One whose appearance
+   * PDFium cannot be trusted to rebuild is drawn into the page instead, and
+   * page text runs on in full — so for those, neither the cut-off warning nor
+   * the offer to widen the box means anything.
+   */
+  clips: boolean;
   /** Why it cannot be changed, when it cannot. */
   notEditableReason?: string;
 }
@@ -315,13 +335,15 @@ export interface FormFieldInfo {
  * Whether a value fits its field, and what it would take to make it fit.
  *
  * A field clips its appearance to its own rectangle, so a value wider than
- * the box is simply cut off — on screen and on paper alike. The one exception
- * is an auto-sized field, whose type shrinks instead.
+ * the box is simply cut off — on screen and on paper alike. The exception is
+ * a field this engine will draw into the page rather than leave as a field:
+ * page text runs on, so nothing is cut off however long the value. See
+ * `FormFieldInfo.clips`.
  */
 export interface FormFieldFit {
   /** False when the value is wider than the box and will be cut off. */
   fits: boolean;
-  /** True when the field sizes its own type, so it shrinks rather than clips. */
+  /** True when the document declares no type size for the field, i.e. `0 Tf`. */
   autoSized: boolean;
   /** Measured width of the text, in points. */
   textWidth: number;
