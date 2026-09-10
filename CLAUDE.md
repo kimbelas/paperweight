@@ -295,6 +295,11 @@ the decisions. `docs/research/01-editing-engines.md` and
   `src/structured-data.ts`. `tests/e2e/seo.spec.ts` compares the two, because
   structured data that contradicts the page is worse than none.
 
+  The README answers those same questions, for the crawl that reads
+  github.com rather than the site, and `tests/docs/readme.test.ts` compares
+  its `###` headings to `FAQ` — the same argument one file further out. The
+  answers there are deliberately shorter; only the questions are pinned.
+
 - **The share image and icons are committed files, not generated at build
   time.** Next can build an `opengraph-image.tsx` with `next/og`, and under
   `output: 'export'` that writes `out/opengraph-image` — no extension, because
@@ -448,11 +453,13 @@ src/io/        Files, printing and local storage, with browser fallbacks.
 src/offline/   The service worker and its registration. Built to out/sw.js.
 src/site.ts    Every public-facing string. No imports; read by both sides.
                structured-data.ts turns it into schema.org JSON-LD.
-scripts/       sync-wasm, sync-ocr, build-worker, build-sw,
-               write-headers, make-fixtures, make-scan-fixture, make-brand.
+scripts/       sync-wasm, sync-ocr, build-worker, build-sw, write-headers,
+               make-fixtures, make-scan-fixture, make-brand, make-screenshots.
 fixtures/      Hand-built PDFs pinning the structural edge cases.
                fixtures/local/ is gitignored: real documents go there.
+docs/screenshots/  The README's images. Committed; `pnpm shots` remakes them.
 tests/engine/  vitest, driving the real WASM under Node.
+tests/docs/    vitest. The README against src/site.ts, so the two cannot drift.
 tests/e2e/     Playwright, against the built static export. Three engines.
 tests/deploy/  Playwright, only under wrangler dev: the response headers.
 wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
@@ -471,6 +478,11 @@ wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
   removed.
 - `pnpm brand` regenerates the share image and icons from `app/icon.svg` and
   `src/site.ts`. Run it by hand after changing either, and commit the PNGs.
+- `pnpm shots` regenerates the README's screenshots from the built site, into
+  `docs/screenshots/`. Run it after `pnpm build` when the interface changes,
+  and commit the PNGs — a README is read on github.com and in a crawl, neither
+  of which runs a build. It may only ever photograph a fixture: a screenshot
+  of anything in `fixtures/local/` is somebody's real document, committed.
 - After changing anything in `src/engine/`, run `pnpm build:worker` or the
   browser will keep running the previous engine.
 - After changing anything in `src/offline/`, run `pnpm build` — `build:sw`
