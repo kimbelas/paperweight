@@ -464,6 +464,11 @@ wrangler.jsonc The Cloudflare deployment. .github/workflows/ci.yml runs it.
 - `pnpm test` engine tests · `pnpm test:e2e` browser tests ·
   `pnpm test:e2e:deploy` the same under wrangler dev with the real headers
 - `pnpm typecheck` · `pnpm build`
+- `pnpm format` before pushing. CI runs `prettier --check .` as part of
+  "Test and build", and it fails the whole job — so a stray line break
+  stops the browser suites from running at all. `pnpm lint` is not the
+  gate and does not currently work: it is `next lint`, which Next 16
+  removed.
 - `pnpm brand` regenerates the share image and icons from `app/icon.svg` and
   `src/site.ts`. Run it by hand after changing either, and commit the PNGs.
 - After changing anything in `src/engine/`, run `pnpm build:worker` or the

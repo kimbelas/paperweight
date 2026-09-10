@@ -195,10 +195,7 @@ let noticeSeq = 0;
  * raised a second time has to be seen a second time and the first copy may be
  * a moment from leaving.
  */
-function raise(
-  current: Notice[],
-  incoming: { kind: Notice['kind']; message: string }[],
-): Notice[] {
+function raise(current: Notice[], incoming: { kind: Notice['kind']; message: string }[]): Notice[] {
   const now = Date.now();
   const next = current.slice();
 
@@ -346,8 +343,7 @@ export const useEditor = create<EditorState>((set) => ({
   deleteSavedSignature: (id) =>
     set((s) => ({ savedSignatures: s.savedSignatures.filter((x) => x.id !== id) })),
 
-  notify: (kind, message) =>
-    set((s) => ({ notices: raise(s.notices, [{ kind, message }]) })),
+  notify: (kind, message) => set((s) => ({ notices: raise(s.notices, [{ kind, message }]) })),
 
   notifyBadges: (badges) => set((s) => ({ notices: raise(s.notices, badges) })),
 

@@ -291,11 +291,7 @@ export function InlineTextEditor({
         }}
       >
         <span className="pointer-events-none">
-          {busy
-            ? 'Applying…'
-            : widthChanged
-              ? `${Math.round(shownWidth)} pt wide · ${hint}`
-              : hint}
+          {busy ? 'Applying…' : widthChanged ? `${Math.round(shownWidth)} pt wide · ${hint}` : hint}
         </span>
 
         {widenable && clipped && !busy && (
