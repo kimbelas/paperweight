@@ -718,7 +718,23 @@ function SectionRail() {
 
 function Section({ id, children }: { id: SectionId; children: React.ReactNode }) {
   const { heading, lead } = SECTION[id];
-  const number = String(SECTIONS.findIndex((entry) => entry.id === id) + 1).padStart(2, '0');
+  const index = SECTIONS.findIndex((entry) => entry.id === id);
+  const number = String(index + 1).padStart(2, '0');
+
+  /**
+   * The first section opens against the "Jump to" strip, not against a gap.
+   *
+   * Every section carries a rule and a wide top margin, which is right when
+   * what is above it is the previous section's content. Above the first one is
+   * the strip, which has a rule of its own — so the page drew two rules 96px
+   * apart with nothing between them, and a void that reads as something having
+   * failed to load rather than as spacing.
+   *
+   * So the first section keeps neither: the strip's own bottom border opens
+   * it, and the margin drops to what separates a rule from a heading rather
+   * than one section from the next. Sections two onwards are untouched.
+   */
+  const first = index === 0;
 
   return (
     <section
@@ -735,8 +751,10 @@ function Section({ id, children }: { id: SectionId; children: React.ReactNode })
       // content about 528px, so the table would clip with nothing saying it
       // scrolls: a failing test and a real bug. At 1280, after the rail's
       // gutter, it has about 680px and fits.
-      className="scroll-mt-16 mt-20 border-t pt-8 xl:mt-24 xl:grid xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:gap-x-16 xl:pt-10"
-      style={rule}
+      className={`scroll-mt-16 xl:grid xl:grid-cols-[minmax(0,22rem)_minmax(0,1fr)] xl:gap-x-16 ${
+        first ? 'mt-8 pt-0 xl:mt-10 xl:pt-0' : 'mt-20 border-t pt-8 xl:mt-24 xl:pt-10'
+      }`}
+      style={first ? undefined : rule}
     >
       {/*
         The title holds while its section's content goes past, then leaves with
@@ -746,13 +764,21 @@ function Section({ id, children }: { id: SectionId; children: React.ReactNode })
         all, and say nothing about why.
 
         No z-index, so it passes under the jump nav rather than over it.
+
+        That is the wide layout. Below `xl` there is one column and the same
+        trap in a different shape: this wrapper is only as tall as the title,
+        so pinning anything inside it would again travel nowhere. The
+        `section-title` class is `display: contents` there, which takes this
+        box away and makes the section the heading's containing block — and
+        `section-heading` below is what pins. Both live in `globals.css`, with
+        the note on why the offset is two measured numbers.
       */}
-      <div className="xl:sticky xl:top-[4.5rem] xl:self-start">
+      <div className="section-title xl:sticky xl:top-[4.5rem] xl:self-start">
         {/* The number is a sibling of the heading, never inside it. Inside,
             the heading's own text — which the structured data lists and the
             SEO suite compares against `SECTIONS` — would read "01What
             Paperweight does". */}
-        <div className="flex items-baseline gap-4">
+        <div className="section-heading flex items-baseline gap-4">
           <span
             aria-hidden="true"
             className="section-number text-xs font-semibold"

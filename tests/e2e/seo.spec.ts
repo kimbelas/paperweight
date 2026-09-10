@@ -325,6 +325,72 @@ test('the landing copy is still there once the editor mounts', async ({ page, ba
   expect(offSite, `off-site requests: ${offSite.join(', ')}`).toEqual([]);
 });
 
+/**
+ * A section's title holds while its content goes past — on a phone too.
+ *
+ * The wide layout puts the title in its own column and sticks it there. On one
+ * column the same intent needs a different mechanism, and the obvious version
+ * silently does nothing: the title's wrapper is only as tall as the title, so
+ * a sticky heading inside it has no room to travel. `display: contents` hands
+ * the heading the section as its containing block instead.
+ *
+ * The offset that clears the sticky "Jump to" strip cannot be derived in CSS —
+ * the strip wraps to two lines on a narrow screen, and where it stops wrapping
+ * depends on the rendered width of five link labels in `site.ts`, which is not
+ * even the same width in every engine. The title therefore sticks at the
+ * strip's short height and reserves the difference as padding for the strip to
+ * cover. That reserve is a measured number, and this is what holds it to
+ * account: a label long enough to add a line fails here rather than tucking a
+ * heading behind the nav where nobody looks. Hence the widths either side of
+ * the wrap, and hence running in all three engines.
+ */
+test('a section title stays put while its content scrolls', async ({ page }) => {
+  for (const width of [360, 390, 430, 460, 470, 768, 1024, 1280, 1440]) {
+    await page.setViewportSize({ width, height: 800 });
+    await page.goto('/');
+    await waitForLanding(page);
+
+    // Into the middle of a long section, far enough that an unpinned title
+    // would be well above the top of the pane.
+    await page.evaluate(() => {
+      document.querySelector('#privacy')!.scrollIntoView();
+      document.querySelector('main')!.scrollTop += 400;
+    });
+
+    const held = await page.evaluate(() => {
+      const nav = document.querySelector('nav[aria-label="Jump to"]')!.getBoundingClientRect();
+      const heading = document.querySelector('#privacy h2')!.getBoundingClientRect();
+      const pane = document.querySelector('main')!.getBoundingClientRect();
+      return {
+        headingTop: heading.top,
+        navBottom: nav.bottom,
+        paneTop: pane.top,
+        onScreen: heading.top >= pane.top - 1 && heading.bottom <= pane.bottom,
+      };
+    });
+
+    // Pinned at all: an unpinned heading would have scrolled off the top.
+    expect(held.onScreen, `title not held at ${width}px`).toBe(true);
+
+    // And pinned clear of the nav rather than behind it.
+    expect(held.headingTop, `title behind the nav at ${width}px`).toBeGreaterThanOrEqual(
+      held.navBottom - 1,
+    );
+
+    // Below `xl` it has to sit under the strip, give or take what it reserves
+    // for a second line of it plus its breathing room: about 16px clear when
+    // the strip wraps, about 40px when it does not. Much more than that means
+    // the strip has grown and the reserve has not. From `xl` the title is a
+    // grid item with its own 4.5rem offset, deliberately clear of the nav, so
+    // this does not apply.
+    if (width < 1280) {
+      expect(held.headingTop, `title floats below the nav at ${width}px`).toBeLessThanOrEqual(
+        held.navBottom + 44,
+      );
+    }
+  }
+});
+
 test('the landing page never scrolls sideways', async ({ page }) => {
   // The landing is a column of grids and one deliberately wide table, laid
   // out inside the editor's own scroll pane rather than the document. A
