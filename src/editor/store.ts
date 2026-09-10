@@ -68,6 +68,15 @@ export interface Notice {
   id: string;
   kind: Badge['kind'] | 'error' | 'info';
   message: string;
+  /**
+   * When it was last raised.
+   *
+   * A notice leaves on its own after a few seconds, and a repeat is folded
+   * into the one already on screen rather than stacked beside it. Without
+   * this the second occurrence would inherit the first one's remaining time
+   * and could vanish immediately — the warning raised, and never seen.
+   */
+  raisedAt: number;
 }
 
 interface EditorState {
@@ -177,6 +186,30 @@ interface EditorState {
 }
 
 let noticeSeq = 0;
+
+/**
+ * Add notices, folding any that are already on screen.
+ *
+ * Repeating an identical notice adds nothing and pushes the rest out of view,
+ * so the existing one is kept — but its clock is restarted, because a warning
+ * raised a second time has to be seen a second time and the first copy may be
+ * a moment from leaving.
+ */
+function raise(
+  current: Notice[],
+  incoming: { kind: Notice['kind']; message: string }[],
+): Notice[] {
+  const now = Date.now();
+  const next = current.slice();
+
+  for (const { kind, message } of incoming) {
+    const at = next.findIndex((n) => n.message === message);
+    if (at >= 0) next[at] = { ...next[at], raisedAt: now };
+    else next.push({ id: `n${++noticeSeq}`, kind, message, raisedAt: now });
+  }
+
+  return next;
+}
 let overlaySeq = 0;
 
 export const nextOverlayId = () => `ov${++overlaySeq}`;
@@ -314,20 +347,9 @@ export const useEditor = create<EditorState>((set) => ({
     set((s) => ({ savedSignatures: s.savedSignatures.filter((x) => x.id !== id) })),
 
   notify: (kind, message) =>
-    set((s) => {
-      // Repeating an identical notice adds nothing and pushes the rest out of
-      // view, so an existing one is kept instead.
-      if (s.notices.some((n) => n.message === message)) return s;
-      return { notices: [...s.notices, { id: `n${++noticeSeq}`, kind, message }] };
-    }),
+    set((s) => ({ notices: raise(s.notices, [{ kind, message }]) })),
 
-  notifyBadges: (badges) =>
-    set((s) => {
-      const fresh = badges
-        .filter((b) => !s.notices.some((n) => n.message === b.message))
-        .map((b) => ({ id: `n${++noticeSeq}`, kind: b.kind, message: b.message }));
-      return fresh.length > 0 ? { notices: [...s.notices, ...fresh] } : s;
-    }),
+  notifyBadges: (badges) => set((s) => ({ notices: raise(s.notices, badges) })),
 
   dismissNotice: (id) => set((s) => ({ notices: s.notices.filter((n) => n.id !== id) })),
   setHistory: (history) => set({ history }),

@@ -255,6 +255,21 @@ the decisions. `docs/research/01-editing-engines.md` and
   badge is raised. Silent substitution is the thing that makes other editors
   mangle documents while appearing to work.
 
+  **A notice leaves on its own, and how long it stays is its severity.** Five
+  seconds for a confirmation, eight for a disclosure like this one, ten for an
+  error or a warning that the document changed in a way the user did not ask
+  for. They used to stay until dismissed, which sounds like the honest choice
+  and stops being one after a dozen edits: the corner becomes a wall of stale
+  acknowledgements, only four are shown, and the one that matters is the one
+  pushed out of sight by the six that do not. Two things keep the clock from
+  swallowing a disclosure — hovering or focusing a notice stops it, and a
+  repeat restarts it rather than folding silently into an entry that is about
+  to disappear. That last one is why `Notice` carries `raisedAt`.
+
+  A test that waits, then asserts a notice is *absent*, is asking a question
+  whose answer expires. `print.spec.ts` records them from a `MutationObserver`
+  as they appear, and asserts over everything the run raised.
+
 - **No AGPL dependencies.** MuPDF is the better redaction engine and is
   AGPL-3.0-or-later or a quoted commercial licence. PDFium is BSD-3, its
   wrapper is MIT, the fonts are SIL OFL 1.1. Keep it that way; the licence
