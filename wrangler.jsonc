@@ -22,8 +22,27 @@
     // is a single route, so there is nothing to rewrite to index.html.
     "not_found_handling": "404-page"
   },
-  // A workers.dev URL for production, and a preview URL for every uploaded
-  // version, which CI posts on pull requests.
+  /*
+   * The site's own domain.
+   *
+   * A custom domain, not a route: Cloudflare then owns the DNS record and the
+   * certificate, and there is no zone-level routing to keep in step. The
+   * apex only — `www` is a redirect rule in the dashboard rather than a
+   * second custom domain, because a second custom domain would serve the
+   * same bytes at a second address and leave two of everything for a crawler
+   * to choose between.
+   *
+   * This requires the zone to be in the same Cloudflare account. Until it
+   * is, `wrangler deploy` fails on this block rather than deploying without
+   * the domain, which is the right way round: a deploy that silently drops
+   * the domain looks exactly like one that worked.
+   */
+  "routes": [{ "pattern": "paperweightpdf.com", "custom_domain": true }],
+
+  // Kept on: this is where every preview deployment lives, and CI posts the
+  // preview URL on pull requests. Production answers on both names, and the
+  // absolute canonical in `src/site.ts` is what tells an index which one is
+  // the site.
   "workers_dev": true,
   "preview_urls": true
 }

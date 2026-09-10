@@ -5,7 +5,7 @@ It changes the text already on the page, removes or adds signatures, fills in
 forms and reads scanned pages. There is no server to upload to, no account to
 make, and nothing to pay.
 
-**Try it: <https://paperweight.itskimmatthewbelas.workers.dev>**
+**Try it: <https://paperweightpdf.com>**
 
 Every document stays on your own machine. The PDF engine is PDFium, compiled
 to WebAssembly and run in a Web Worker inside the tab, so a file is opened,

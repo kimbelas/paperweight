@@ -77,6 +77,6 @@ Script and Great Vibes fonts under SIL OFL 1.1. No AGPL dependencies.
 
 ## Links
 
-- Paperweight: https://paperweight.itskimmatthewbelas.workers.dev/
+- Paperweight: https://paperweightpdf.com/
 - Source: https://github.com/kimbelas/paperweight
 - Readme: https://raw.githubusercontent.com/kimbelas/paperweight/main/README.md

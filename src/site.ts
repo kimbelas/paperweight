@@ -13,8 +13,18 @@
  * a single engine import would drag PDFium into the page bundle.
  */
 
-/** The canonical origin. No trailing slash: paths are appended. */
-export const SITE_URL = 'https://paperweight.itskimmatthewbelas.workers.dev';
+/**
+ * The canonical origin. No trailing slash: paths are appended.
+ *
+ * Everything the outside world is told about where this lives comes from
+ * here — the canonical link, the Open Graph URL and image, `sitemap.xml`,
+ * the `Sitemap:` line in `robots.txt`, every `@id` in the structured data,
+ * and the host printed on the share image. The Worker also answers on its
+ * `workers.dev` name, and always will, because that is where preview
+ * deployments live; the absolute canonical above is what stops that copy
+ * from competing with this one in an index.
+ */
+export const SITE_URL = 'https://paperweightpdf.com';
 
 export const SITE_NAME = 'Paperweight';
 
