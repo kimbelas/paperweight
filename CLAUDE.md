@@ -358,11 +358,42 @@ the decisions. `docs/research/01-editing-engines.md` and
   right, the artefact is right, and the app behaves as though neither had
   changed — indistinguishable from a fix that does not work. It cost three
   rounds of chasing the wrong cause on a real bug report before anyone
-  suspected the cache. `build-worker.mjs` writes `src/engine/worker-build.json`
+  suspected the cache. `build-worker.mjs` writes `public/engine-worker.meta.json`
   and `useEngine` appends `?v=<stamp>`, so a rebuild always invalidates it. The
   same stamp is logged once as `Paperweight engine build <n>`, which is how
   you tell from the console which engine is actually running when behaviour
   and source appear to disagree. `tests/e2e/engine-build.spec.ts` guards both.
+
+  **The offline worker must honour the stamp, or it silently undoes it.** The
+  service worker serves the engine cache-first with `ignoreSearch`, which is
+  right for its own build and, unguarded, wrong for the first load after a
+  deploy: the previous worker still answers while the page is already new, so
+  it served the previous engine under the new shell. The `?v=` was on the
+  request and meant nothing. This was found the way the original was — a fix
+  for a bug report was deployed, verified against the deployment by script,
+  and reported as still happening from a browser that had the site open
+  before. So the stamp is baked into three places from one build:
+  `build-worker.mjs` defines it into the worker, which puts it on the WASM
+  URL as well (a new worker running the previous binary is a glue-and-binary
+  mismatch); `build-sw.mjs` defines it into the service worker as
+  `__ENGINE_STAMP__`; and `asset` in `service-worker.ts` sends any engine
+  request carrying a different stamp straight to the network and caches
+  nothing from it. `engine-build.spec.ts` asserts the three agree.
+
+  That guard lives in the *new* worker, so it fixes every deploy after the one
+  that introduces it — but not that one, because the worker already installed
+  in a returning visitor's browser is the previous, unguarded one, and nothing
+  in the new build can reach back to change how it answers the first load. The
+  page is the only place that can. `worker.ts` exposes `build()`, `useEngine`
+  compares it to the stamp the page asked for, and on a mismatch — or on
+  `build` being **absent**, which is what an engine from before this check
+  looks like — it calls `recoverFromStaleEngine` in `register.ts`: one
+  `registration.update()` (which installs the guarded worker and, via
+  `skipWaiting`, gives it control) followed by one reload, guarded by a
+  `sessionStorage` mark so a mismatch a reload cannot fix never loops. The
+  check runs as the worker is created, before a document is open, so the
+  reload costs nothing. This is what heals a browser that is *currently* on a
+  bad build; the stamp guard is what stops it happening again.
 
 - **The worker is built by `scripts/build-worker.mjs`, not by the page
   bundler.** `new Worker(new URL('./worker.ts', import.meta.url))` was tried
@@ -455,7 +486,14 @@ the decisions. `docs/research/01-editing-engines.md` and
   A navigation is network-first so a deploy is picked up on the next reload;
   everything else is cache-first, matched with `ignoreSearch`, because the
   engine worker is requested as `engine-worker.js?v=<stamp>` and Next appends
-  a hash to its metadata files. Registration lives in the client bundle
+  a hash to its metadata files — with one exception: an engine request whose
+  stamp is not this worker's own goes to the network, because it comes from a
+  page newer than the worker (see "The offline worker must honour the stamp"
+  above). And the lookup searches this build's three caches by name, never
+  `caches.match` across the origin: a previous build's engine cache can
+  outlive `activate` (a browser closed mid-activation leaves it behind), and
+  with `ignoreSearch` it would answer the new stamp with the old engine on
+  every load. Registration lives in the client bundle
   (`src/offline/register.ts`), never in an inline script: `write-headers.mjs`
   allow-lists inline scripts by hash, so an inline registration would add one
   to the policy for nothing. The policy itself needs no change — the worker is

@@ -27,6 +27,15 @@ const api = {
   open: (bytes: Uint8Array, password?: string) => session.open(bytes, password),
   info: () => session.info(),
   isOpen: () => session.isOpen,
+  /**
+   * The build stamp baked into this worker by `build-worker.mjs`.
+   *
+   * The page logs the stamp it *asked for*; only the worker can say which
+   * bytes actually answered. `useEngine` compares the two, because a cached
+   * worker running under a newer page is the failure that is otherwise
+   * indistinguishable from a fix that does not work.
+   */
+  build: () => process.env.NEXT_PUBLIC_WORKER_STAMP ?? 'dev',
   close: () => session.close(),
 
   // --- Reading -----------------------------------------------------------

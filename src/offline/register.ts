@@ -30,6 +30,95 @@ const SCRIPT = '/sw.js';
 const WARM = { type: 'paperweight-warm-engine' };
 
 /**
+ * Marks that a reload has already been spent trying to shed a stale engine for
+ * a given build, so `recoverFromStaleEngine` can never loop.
+ */
+const RECOVERY_MARK = 'paperweight-engine-recovery';
+
+/**
+ * Recover when the running engine is not the one this page was built for.
+ *
+ * The engine worker and the WASM binary are served by the offline worker,
+ * cache-first. The stamp on their URL and the guard in `service-worker.ts`
+ * make a *newer* offline worker refuse to answer with an older engine — but
+ * the offline worker that ships that guard is itself deployed as the engine
+ * is fixed, and the previous one, already installed in a returning visitor's
+ * browser, has no such guard. So the first load after that particular deploy
+ * is served the previous engine by the previous worker, and no change to the
+ * new worker can reach back and stop it. The page is the only place left that
+ * can tell, because only the worker reports which build actually answered.
+ *
+ * The cure is the standard one, driven from the page: ask the registration to
+ * update (which installs the new, guarded worker and, via `skipWaiting`, hands
+ * it control), then reload so the new worker serves the fetch. A `controller`
+ * has to exist for this to be the explanation at all; without one, a reload
+ * changes nothing and is not attempted. One reload per build, remembered
+ * across it in `sessionStorage`, because a mismatch that survives the reload
+ * is something a reload cannot fix and must not be retried into a loop.
+ */
+export async function recoverFromStaleEngine(expected: string): Promise<void> {
+  if (typeof navigator === 'undefined' || !('serviceWorker' in navigator)) return;
+  // No worker in control means the cache is not the cause, so a reload is
+  // pointless. The browser's own `?v=` already defeats its HTTP cache.
+  if (!navigator.serviceWorker.controller) return;
+
+  let alreadyTried: string | null = null;
+  try {
+    alreadyTried = sessionStorage.getItem(RECOVERY_MARK);
+  } catch {
+    // Private windows can throw. Without a durable mark a reload could loop,
+    // so treat storage being unavailable as "already tried" and only warn.
+    alreadyTried = expected;
+  }
+  if (alreadyTried === expected) {
+    console.error(
+      `Paperweight is still running engine build other than ${expected} after a reload. ` +
+        `Close every tab of the site and reopen it; if it persists you may be offline.`,
+    );
+    return;
+  }
+  try {
+    sessionStorage.setItem(RECOVERY_MARK, expected);
+  } catch {
+    // Nothing to persist the guard in; do not risk a reload loop.
+    return;
+  }
+
+  try {
+    const registration = await navigator.serviceWorker.getRegistration();
+    if (registration) {
+      await registration.update().catch(() => {});
+      await new Promise<void>((resolve) => {
+        const done = setTimeout(resolve, 6000);
+        navigator.serviceWorker.addEventListener(
+          'controllerchange',
+          () => {
+            clearTimeout(done);
+            resolve();
+          },
+          { once: true },
+        );
+      });
+    }
+  } catch {
+    // Fall through to the reload regardless: it is the guarded, one-time step.
+  }
+  window.location.reload();
+}
+
+/**
+ * The running engine is the one expected, so clear any recovery mark: a stale
+ * engine detected later, after another deploy, should get its own reload.
+ */
+export function confirmEngineFresh(): void {
+  try {
+    sessionStorage.removeItem(RECOVERY_MARK);
+  } catch {
+    // Nothing stored, nothing to clear.
+  }
+}
+
+/**
  * Start caching the app for offline use. Safe to call more than once: the
  * browser treats a repeat registration of the same script and scope as a
  * no-op with an update check.

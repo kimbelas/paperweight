@@ -1,4 +1,4 @@
-import { statSync } from 'node:fs';
+import { readFileSync, statSync } from 'node:fs';
 import { join } from 'node:path';
 import type { NextConfig } from 'next';
 
@@ -7,13 +7,24 @@ import type { NextConfig } from 'next';
  *
  * A worker is fetched by plain URL and browsers cache one hard, so a rebuilt
  * engine is otherwise ignored: the tab goes on running the previous worker
- * while the source and the built artefact are both correct. Taken from the
- * built worker's own modification time, so it changes exactly when the worker
- * does -- and read here rather than from a generated source file, because an
- * import that only exists after a build breaks a fresh clone and any stale
- * bundler cache.
+ * while the source and the built artefact are both correct. The stamp is the
+ * one `build-worker.mjs` recorded in `engine-worker.meta.json` when it built
+ * the worker, because that same value is baked into the worker (which puts
+ * it on the WASM URL) and into the offline service worker (which refuses to
+ * answer a request stamped with any other build from its cache). Three places
+ * have to agree, so all three read one number. It is read here rather than
+ * imported, because an import that only exists after a build breaks a fresh
+ * clone and any stale bundler cache; the fallbacks keep such a clone running.
  */
 function workerStamp(): string {
+  try {
+    const meta = JSON.parse(
+      readFileSync(join(__dirname, 'public', 'engine-worker.meta.json'), 'utf8'),
+    ) as { stamp?: number };
+    if (meta.stamp) return String(meta.stamp);
+  } catch {
+    // Fall through to the worker file itself.
+  }
   try {
     return String(Math.round(statSync(join(__dirname, 'public', 'engine-worker.js')).mtimeMs));
   } catch {

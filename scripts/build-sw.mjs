@@ -147,6 +147,17 @@ const [shellStamp, engineStamp, runtimeStamp] = await Promise.all([
   stamp(lazy),
 ]);
 
+/**
+ * The engine build stamp, as the page puts it in the worker's URL and the
+ * worker puts it in the binary's. The service worker is given the same value
+ * so it can tell a request from its own build apart from one made by a newer
+ * page: see `asset` in `service-worker.ts`.
+ */
+const meta = JSON.parse(await readFile(join(root, 'public', 'engine-worker.meta.json'), 'utf8'));
+if (!meta.stamp) {
+  throw new Error('public/engine-worker.meta.json names no stamp. Run `pnpm build:worker` first.');
+}
+
 await build({
   entryPoints: [entry],
   outfile: join(outDir, 'sw.js'),
@@ -167,6 +178,7 @@ await build({
     __RUNTIME_CACHE__: JSON.stringify(`paperweight-runtime-${runtimeStamp}`),
     __SHELL_FILES__: JSON.stringify(shell.map((file) => file.url)),
     __ENGINE_FILES__: JSON.stringify(engine.map((file) => file.url)),
+    __ENGINE_STAMP__: JSON.stringify(String(meta.stamp)),
   },
   tsconfig: join(root, 'tsconfig.json'),
   logLevel: 'warning',
