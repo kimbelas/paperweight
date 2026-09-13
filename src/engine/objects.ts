@@ -38,7 +38,7 @@ export function getImageMetadata(
   });
 }
 
-function objectBounds(mod: WrappedPdfiumModule, obj: number): Rect {
+export function objectBounds(mod: WrappedPdfiumModule, obj: number): Rect {
   return withScope(mod, (scope) => {
     const l = scope.allocFloat();
     const b = scope.allocFloat();

@@ -43,20 +43,33 @@ export function resolvePath(mod: WrappedPdfiumModule, page: number, path: Object
 }
 
 /**
- * Resolve the parent of a path, which is what removal needs: an object nested
- * inside a form is removed with `FPDFFormObj_RemoveObject` against that form,
- * not with `FPDFPage_RemoveObject` against the page.
+ * The form objects between the page and a path's target, outermost first.
+ *
+ * Empty for a top-level object. Null when any link is missing, which means the
+ * path is stale. Removal needs the whole chain rather than just the parent:
+ * a form's content stream is only rewritten once that form sits directly on
+ * the page, so every form above the target may have to be lifted — see
+ * `hoist.ts`.
  */
-export function resolveParent(
+export function resolveChain(
   mod: WrappedPdfiumModule,
   page: number,
   path: ObjectPath,
-): { form: number; childIndex: number } | null {
-  if (path.length < 2) return null;
-  const parentPath = path.slice(0, -1);
-  const form = resolvePath(mod, page, parentPath);
-  if (!form) return null;
-  return { form, childIndex: path[path.length - 1] };
+): number[] | null {
+  if (path.length === 0) return null;
+
+  const chain: number[] = [];
+  let obj = mod.FPDFPage_GetObject(page, path[0]);
+  if (!obj) return null;
+
+  for (let depth = 1; depth < path.length; depth++) {
+    if (mod.FPDFPageObj_GetType(obj) !== ObjType.Form) return null;
+    chain.push(obj);
+    const next = mod.FPDFFormObj_GetObject(obj, path[depth]);
+    if (!next) return null;
+    obj = next;
+  }
+  return chain;
 }
 
 export interface VisitedObject {
@@ -101,7 +114,11 @@ export function walkObjects(
   }
 }
 
-function objectMatrix(mod: WrappedPdfiumModule, handle: number): Matrix {
+/**
+ * An object's own matrix. For a form object that is the matrix it was placed
+ * with, which maps its contents into the space of whatever holds it.
+ */
+export function objectMatrix(mod: WrappedPdfiumModule, handle: number): Matrix {
   return withScope(mod, (scope) => {
     const ptr = scope.allocMatrix();
     if (!mod.FPDFPageObj_GetMatrix(handle, ptr)) return IDENTITY;

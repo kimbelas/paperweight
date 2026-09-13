@@ -16,9 +16,11 @@ import type { Badge } from './types';
  * everything.
  *
  * A nested object — one inside a form XObject — cannot be repositioned that
- * way, for the same reason it cannot be edited in place: regenerating the page
- * does not rewrite a form's own content stream, and PDFium exposes no call
- * that does. Such an object is instead removed and redrawn at page level.
+ * way, for the same reason it cannot be edited in place: PDFium rewrites a
+ * form's own content stream only for a removal, never for a change to an
+ * object inside it. Such an object is instead removed and redrawn at page
+ * level; making that removal reach the file when the form is itself nested is
+ * `hoist.ts`'s business.
  *
  * The redraw reuses the original font handle rather than substituting.
  * A move does not change the text, so the embedded subset is guaranteed to
