@@ -165,6 +165,92 @@ export function removeAnnotations(doc: PdfDocument, pageIndex: number, indices: 
   return removed;
 }
 
+/** What `removeAnnotationsUnder` took out, so the interface can say so. */
+export interface HiddenRemoval {
+  /** Form-field widgets removed (their fields detached from the tree). */
+  fields: number;
+  /** Other annotations removed: signatures, stamps, ink. */
+  annotations: number;
+}
+
+/** Does `point` fall inside `rect`? Both in PDF user space. */
+function pointInRect(x: number, y: number, rect: Rect): boolean {
+  return x >= rect.left && x <= rect.right && y >= rect.bottom && y <= rect.top;
+}
+
+/** Fraction of `inner`'s area that lies within `outer`. */
+function overlapFraction(inner: Rect, outer: Rect): number {
+  const w = Math.max(0, Math.min(inner.right, outer.right) - Math.max(inner.left, outer.left));
+  const h = Math.max(0, Math.min(inner.top, outer.top) - Math.max(inner.bottom, outer.bottom));
+  const area = (inner.right - inner.left) * (inner.top - inner.bottom);
+  if (area <= 0) return 0;
+  return (w * h) / area;
+}
+
+/**
+ * Remove the annotations that a cover rectangle or a line of added text sits
+ * on top of, so a viewer cannot draw them back over it.
+ *
+ * This is the fix for the trap where covering a signature, or typing "N/A"
+ * onto a form field, looks right in the editor and wrong on paper. The editor
+ * does not paint annotations while editing, so the cover appears to hold; but
+ * `FPDF_RenderPageBitmap` and every real viewer paint annotation appearance
+ * streams and form-field values *on top of* page content. The cover and the
+ * typed text are page content; the widget and the signature are annotations;
+ * so the annotation wins in print, in Adobe and in the saved file. The only
+ * way to make the cover mean what it shows is to take the annotation out —
+ * which, for a form-field widget, also detaches its field (see
+ * `removeAnnotations`), so the stored value cannot be regenerated either.
+ *
+ * Page text and images are deliberately untouched: they are page content, so
+ * the rectangle genuinely covers them, and Cover is non-destructive there by
+ * design. Only `rect` (Cover) and `text` (Add text) placements trigger this;
+ * an image or a mark dropped on the page removes nothing.
+ *
+ * A cover removes an annotation when it hides most of it (60% of its area); a
+ * line of text removes the annotation its origin sits inside, which is exactly
+ * the field the user typed into.
+ */
+type Cover = { type: string; page: number; rect?: Rect; x?: number; y?: number };
+
+export function removeAnnotationsUnder(
+  doc: PdfDocument,
+  placements: readonly Cover[],
+): HiddenRemoval {
+  const removal: HiddenRemoval = { fields: 0, annotations: 0 };
+
+  // Group the covering placements by page, since removal renumbers a page's
+  // annotations and each `removeAnnotations` call reloads the document.
+  const byPage = new Map<number, Cover[]>();
+  for (const p of placements) {
+    if (p.type !== 'rect' && p.type !== 'text') continue;
+    const list = byPage.get(p.page) ?? [];
+    list.push(p);
+    byPage.set(p.page, list);
+  }
+
+  for (const [pageIndex, covers] of byPage) {
+    const annots = listAnnotations(doc, pageIndex);
+    const hit: number[] = [];
+    for (const annot of annots) {
+      const covered = covers.some((p) => {
+        if (p.type === 'rect' && p.rect) return overlapFraction(annot.bounds, p.rect) >= 0.6;
+        if (p.type === 'text' && p.x !== undefined && p.y !== undefined) {
+          return pointInRect(p.x, p.y, annot.bounds);
+        }
+        return false;
+      });
+      if (!covered) continue;
+      hit.push(annot.index);
+      if (annot.subtype === AnnotSubtype.Widget) removal.fields++;
+      else removal.annotations++;
+    }
+    if (hit.length > 0) removeAnnotations(doc, pageIndex, hit);
+  }
+
+  return removal;
+}
+
 /** Details of the document's cryptographic signatures. */
 export interface DigitalSignature {
   index: number;

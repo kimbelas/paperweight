@@ -145,6 +145,7 @@ function severity(kind: Notice['kind']): Severity {
     case 'signature-invalidated':
     case 'text-overflows':
     case 'partial-removal':
+    case 'covered-removed':
       return 'warn';
     case 'font-substituted':
     case 'kerning-lost':
