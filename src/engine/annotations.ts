@@ -1,6 +1,7 @@
 import type { WrappedPdfiumModule } from '@embedpdf/pdfium';
 import { AnnotSubtype } from './constants';
 import type { PdfDocument } from './document';
+import { detachFieldsFromForm } from './field-tree';
 import { readRectF, withScope, type Rect } from './memory';
 import type { Annotation } from './types';
 
@@ -111,20 +112,56 @@ export function listAnnotations(doc: PdfDocument, pageIndex: number): Annotation
  *
  * Indices are removed high to low, because `FPDFPage_RemoveAnnot` renumbers
  * everything after the one it removes.
+ *
+ * A widget is the visible end of a form field, and the field is somewhere
+ * `FPDFPage_RemoveAnnot` never looks: `/AcroForm /Fields`, or a parent's
+ * `/Kids`. Left there, Acrobat rebuilds the widget from the field tree and the
+ * saved file shows the field the user watched disappear, old value and all.
+ * So the widgets' object numbers are read before anything is removed — an
+ * annotation that has left `/Annots` cannot be opened again — the tree is
+ * edited in the serialised bytes afterwards (`field-tree.ts` says why it has
+ * to be bytes), and the document is reloaded from the result.
+ *
+ * That reload voids every PDFium handle for the document. Do not hold a page,
+ * annotation or text page across this call; `doc.page()` hands out a fresh
+ * one afterwards.
+ *
+ * Annotations are not page content, so the page is not marked dirty: there is
+ * nothing in its content stream to regenerate, and regenerating it anyway
+ * would rewrite a stream the user did not touch. Callers that need the page
+ * repainted say so through the session's `repaint` list.
  */
 export function removeAnnotations(doc: PdfDocument, pageIndex: number, indices: number[]): number {
   const { mod } = doc;
   const page = doc.page(pageIndex);
-  let removed = 0;
+  const ordered = [...new Set(indices)].sort((a, b) => b - a);
 
-  for (const index of [...new Set(indices)].sort((a, b) => b - a)) {
-    if (mod.FPDFPage_RemoveAnnot(page, index)) removed++;
+  const widgetAt = new Map<number, number>();
+  for (const index of ordered) {
+    const annot = mod.FPDFPage_GetAnnot(page, index);
+    if (!annot) continue;
+    try {
+      if (mod.FPDFAnnot_GetSubtype(annot) === AnnotSubtype.Widget) {
+        // 0 for a widget written as a direct object, which nothing in the
+        // field tree can refer to, so there is nothing to detach.
+        const objectNumber = mod.EPDFAnnot_GetObjectNumber(annot);
+        if (objectNumber > 0) widgetAt.set(index, objectNumber);
+      }
+    } finally {
+      mod.FPDFPage_CloseAnnot(annot);
+    }
   }
 
-  // Annotations live outside the content stream, so removing one does not
-  // require regenerating page content. The page is still marked so the viewer
-  // re-renders it.
-  if (removed > 0) doc.markDirty(pageIndex);
+  let removed = 0;
+  const widgets: number[] = [];
+  for (const index of ordered) {
+    if (!mod.FPDFPage_RemoveAnnot(page, index)) continue;
+    removed++;
+    const objectNumber = widgetAt.get(index);
+    if (objectNumber !== undefined) widgets.push(objectNumber);
+  }
+
+  if (widgets.length > 0) doc.reload(detachFieldsFromForm(doc.save(), widgets));
   return removed;
 }
 

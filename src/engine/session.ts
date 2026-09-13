@@ -399,10 +399,18 @@ export class EditorSession {
     const candidate = this.signatures().candidates.find((c) => c.id === id);
     if (!candidate) throw new Error('That signature is no longer in the document.');
 
-    return this.commitSync('Remove signature', (doc) => {
-      const result = removeSignature(doc, candidate);
-      return result.badges;
-    });
+    // A signature that is an annotation leaves no mark on the content stream,
+    // so the page is repainted rather than regenerated. An image signature
+    // marks its own page dirty; the union covers both.
+    return this.commitSync(
+      'Remove signature',
+      (doc) => {
+        const result = removeSignature(doc, candidate);
+        return result.badges;
+      },
+      false,
+      [candidate.page],
+    );
   }
 
   removeObjects(pageIndex: number, paths: number[][]): CommitResult {
@@ -438,12 +446,19 @@ export class EditorSession {
   }
 
   removeAnnotationsAt(pageIndex: number, indices: number[]): CommitResult {
-    return this.commitSync('Delete annotation', (doc) => {
-      if (removeAnnotations(doc, pageIndex, indices) === 0) {
-        throw new Error('Nothing was removed.');
-      }
-      return [];
-    });
+    // An annotation is not page content, so nothing is regenerated and the
+    // page is listed for repainting instead.
+    return this.commitSync(
+      'Delete annotation',
+      (doc) => {
+        if (removeAnnotations(doc, pageIndex, indices) === 0) {
+          throw new Error('Nothing was removed.');
+        }
+        return [];
+      },
+      false,
+      [pageIndex],
+    );
   }
 
   /** Flatten pending additions into the document. */

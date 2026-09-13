@@ -43,6 +43,8 @@ export class PdfDocument {
    * annotation index. Null where the file supplied no appearance.
    */
   private readonly originalApSizes = new Map<number, (number | null)[]>();
+  /** Bumped by `reload`; see `generation`. */
+  private generationCounter = 0;
 
   private constructor(
     readonly mod: WrappedPdfiumModule,
@@ -59,6 +61,18 @@ export class PdfDocument {
    * parses lazily and reads from it for as long as the document is open.
    */
   static open(mod: WrappedPdfiumModule, bytes: Uint8Array, password = ''): PdfDocument {
+    const { handle, dataPtr } = PdfDocument.load(mod, bytes, password);
+    const doc = new PdfDocument(mod, handle, dataPtr, bytes.byteLength);
+    doc.initFormEnvironment();
+    return doc;
+  }
+
+  /** Copy bytes onto the heap and parse them; frees the copy if parsing fails. */
+  private static load(
+    mod: WrappedPdfiumModule,
+    bytes: Uint8Array,
+    password: string,
+  ): { handle: number; dataPtr: number } {
     const dataPtr = mod.pdfium.wasmExports.malloc(bytes.byteLength);
     if (!dataPtr) throw new Error('Not enough memory to open this document.');
     mod.pdfium.HEAPU8.set(bytes, dataPtr);
@@ -72,9 +86,48 @@ export class PdfDocument {
       throw err;
     }
 
-    const doc = new PdfDocument(mod, handle, dataPtr, bytes.byteLength);
-    doc.initFormEnvironment();
-    return doc;
+    return { handle, dataPtr };
+  }
+
+  /**
+   * Replace the document's contents with these bytes, in place.
+   *
+   * For a change PDFium's object model cannot make but the serialised file
+   * can take: `removeAnnotations` edits the form field tree in the output of
+   * `save` and hands the result back here. The alternative was to patch the
+   * bytes at every save and leave the in-memory document disagreeing with the
+   * file until the next undo; reloading keeps one truth, and has PDFium parse
+   * the edited file at once rather than leaving that to whatever opens the
+   * download.
+   *
+   * Every handle PDFium issued for the document is void afterwards — pages,
+   * annotations, text pages and fonts alike. `generation` changes so caches
+   * keyed by this object can tell. Call it with bytes from `save`, which has
+   * already regenerated every dirty page; pending marks are dropped here
+   * because they described the old object model.
+   *
+   * The replacement is parsed before the current document is released, so a
+   * failure leaves the document exactly as it was.
+   */
+  reload(bytes: Uint8Array): void {
+    this.assertOpen();
+    const { handle, dataPtr } = PdfDocument.load(this.mod, bytes, '');
+
+    this.release();
+    this.docHandle = handle;
+    this.dataPtr = dataPtr;
+    this.dataLen = bytes.byteLength;
+    this.generationCounter++;
+    this.initFormEnvironment();
+  }
+
+  /**
+   * Which load of the document this is. Starts at 0 and rises on every
+   * `reload`, so a cache of PDFium handles keyed by the document can notice
+   * that its entries belong to a document that no longer exists.
+   */
+  get generation(): number {
+    return this.generationCounter;
   }
 
   get handle(): number {
@@ -406,11 +459,17 @@ export class PdfDocument {
 
   close(): void {
     if (this.closed) return;
+    this.release();
+    this.closed = true;
+  }
 
+  /** Give back every PDFium resource the current load holds. */
+  private release(): void {
     // Order matters: pages are withdrawn from the form environment (inside
     // invalidateAllPages), then the environment goes, then the document, and
     // only then is the struct PDFium was holding released.
     this.invalidateAllPages();
+    this.dirtyPages.clear();
 
     if (this.formHandle) {
       this.mod.FPDFDOC_ExitFormFillEnvironment(this.formHandle);
@@ -430,7 +489,6 @@ export class PdfDocument {
     this.docHandle = 0;
     this.dataPtr = 0;
     this.dataLen = 0;
-    this.closed = true;
   }
 
   private assertOpen(): void {

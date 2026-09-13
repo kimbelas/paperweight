@@ -319,6 +319,78 @@ fixtures['acroform-sig-field.pdf'] = () =>
   );
 
 // ---------------------------------------------------------------------------
+// 9a. A field tree with every shape the removal path has to walk. Removing a
+//     widget with FPDFPage_RemoveAnnot leaves its field in /AcroForm /Fields,
+//     and Acrobat rebuilds the widget from there; field-tree.ts detaches it
+//     in the saved bytes. This fixture is what that code is tested against:
+//
+//     - /AcroForm is an indirect object and /Fields an indirect array, so
+//       neither can be assumed to sit inline in the catalog.
+//     - "Name" is a field whose single widget is a separate kid (the field
+//       dictionary holds /T and /V, the widget only /Rect). Removing the
+//       widget must remove the field.
+//     - "Sex" is a radio group with two widget kids. Removing one must leave
+//       the group standing with the other; removing both must remove it.
+//     - "f1" is a merged field-and-widget two levels down, in the
+//       topmostSubform[0].Page1[0] style of a form exported from Designer.
+//       Removing it must prune the two ancestors it leaves childless.
+//     - /CO lists Name and f1, and has to lose them too.
+// ---------------------------------------------------------------------------
+fixtures['field-tree.pdf'] = () =>
+  buildPdf(
+    [
+      // 1
+      '<< /Type /Catalog /Pages 2 0 R /AcroForm 12 0 R >>',
+      // 2
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      // 3
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
+        '/Resources << /Font << /F1 15 0 R >> >> /Contents 4 0 R ' +
+        '/Annots [6 0 R 8 0 R 9 0 R 14 0 R] >>',
+      // 4
+      stream(
+        '',
+        `BT /F1 14 Tf 72 720 Td (Registration) Tj ET
+BT /F1 11 Tf 72 660 Td (Name) Tj ET
+BT /F1 11 Tf 72 620 Td (Sex) Tj ET
+BT /F1 11 Tf 72 580 Td (Reference) Tj ET`,
+      ),
+      // 5: a text field whose widget is a separate kid.
+      '<< /FT /Tx /T (Name) /V (Jane Doe) /DA (/Helv 11 Tf 0 g) /Kids [6 0 R] >>',
+      // 6
+      '<< /Type /Annot /Subtype /Widget /Parent 5 0 R /P 3 0 R ' +
+        '/Rect [250 656 460 674] /F 4 >>',
+      // 7: a radio group. /Ff 49152 is Radio | NoToggleToOff.
+      '<< /FT /Btn /Ff 49152 /T (Sex) /V /F /DA (/ZaDb 0 Tf 0 g) /Kids [8 0 R 9 0 R] >>',
+      // 8
+      '<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R ' +
+        '/Rect [250 616 266 632] /F 4 /AS /F /AP << /N << /F 16 0 R /Off 17 0 R >> >> >>',
+      // 9
+      '<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R ' +
+        '/Rect [300 616 316 632] /F 4 /AS /Off /AP << /N << /M 16 0 R /Off 17 0 R >> >> >>',
+      // 10: two levels of grouping above a single terminal field.
+      '<< /T (topmostSubform) /Kids [11 0 R] >>',
+      // 11
+      '<< /T (Page1) /Parent 10 0 R /Kids [14 0 R] >>',
+      // 12: the AcroForm dictionary, indirect.
+      '<< /Fields 13 0 R /CO [5 0 R 14 0 R] /DA (/Helv 0 Tf 0 g) ' +
+        '/DR << /Font << /Helv 15 0 R >> >> >>',
+      // 13: the field list, indirect.
+      '[5 0 R 7 0 R 10 0 R]',
+      // 14: a merged field and widget, nested.
+      '<< /Type /Annot /Subtype /Widget /FT /Tx /T (f1) /Parent 11 0 R /P 3 0 R ' +
+        '/V (REF-2026-0913) /Rect [250 576 460 594] /F 4 /DA (/Helv 11 Tf 0 g) >>',
+      // 15
+      HELV,
+      // 16: a radio button that is on.
+      stream('/Type /XObject /Subtype /Form /BBox [0 0 16 16]', 'q 0 g 4 4 8 8 re f Q'),
+      // 17: one that is off.
+      stream('/Type /XObject /Subtype /Form /BBox [0 0 16 16]', 'q 0 G 0.5 0.5 15 15 re S Q'),
+    ],
+    1,
+  );
+
+// ---------------------------------------------------------------------------
 // 9b. A filled application form: the values are in the form, not on the page.
 //
 //     Three cases on one page, because they fail differently. The two text
