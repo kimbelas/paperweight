@@ -214,10 +214,8 @@ BT /F1 12 Tf 72 620 Td (Ordinary unkerned line for comparison) Tj ET`,
 //    "Signature" label in the bottom third. This is the flattened-signature
 //    case the detection heuristics have to find.
 // ---------------------------------------------------------------------------
-fixtures['flattened-signature.pdf'] = () => {
-  const w = 60;
-  const h = 20;
-  // A diagonal ink stroke: grey image, alpha where the "ink" is.
+/** A diagonal ink stroke: an RGB image, with alpha where the "ink" is. */
+function inkStroke(w = 60, h = 20) {
   const rgb = Buffer.alloc(w * h * 3, 0xff);
   const alpha = Buffer.alloc(w * h, 0x00);
   for (let x = 0; x < w; x++) {
@@ -232,6 +230,11 @@ fixtures['flattened-signature.pdf'] = () => {
       rgb[i * 3 + 2] = 0x60;
     }
   }
+  return { w, h, rgb, alpha };
+}
+
+fixtures['flattened-signature.pdf'] = () => {
+  const { w, h, rgb, alpha } = inkStroke();
   return buildPdf(
     [
       '<< /Type /Catalog /Pages 2 0 R >>',
@@ -263,6 +266,111 @@ q 180 0 0 60 130 135 cm /Im0 Do Q`,
     1,
   );
 };
+
+// ---------------------------------------------------------------------------
+// 7b. Forms nested two and three deep, each placed with a real translation,
+//     the middle one with its own /Matrix. This is how online form fillers and
+//     print drivers wrap a page: the page's own stream is one `Do`, and
+//     everything the user sees lives two levels down. PDFium rewrites a form's
+//     stream only when that form sits directly on the page, so a removal at
+//     this depth used to vanish on save while the screen showed it gone — an
+//     edited address printed twice, and a removed signature printed.
+//
+//     The outer form is drawn under a page-sized clip, as wrappers often are.
+//     PDFium discards a clip that crops nothing while parsing, so this one
+//     never reaches the engine — and the test pins that it does not.
+// ---------------------------------------------------------------------------
+fixtures['form-xobject-nested.pdf'] = () => {
+  const { w, h, rgb, alpha } = inkStroke();
+  return buildPdf(
+    [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
+        '/Resources << /Font << /F1 10 0 R >> /XObject << /FmA 5 0 R >> >> /Contents 4 0 R >>',
+      stream(
+        '',
+        `BT /F1 12 Tf 72 740 Td (Page level line) Tj ET
+q 0 0 612 792 re W n 1 0 0 1 40 30 cm /FmA Do Q`,
+      ),
+      // A: the outer wrapper, holding one line of its own and form B.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 572 762] ' +
+          '/Resources << /Font << /F1 10 0 R >> /XObject << /FmB 6 0 R >> >>',
+        `BT /F1 11 Tf 20 700 Td (Outer form line) Tj ET
+q 1 0 0 1 10 20 cm /FmB Do Q`,
+      ),
+      // B: the page's real content. Its /Matrix is folded into its children's
+      // coordinates by the parser, its placement is not.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 560 740] /Matrix [1 0 0 1 5 5] ' +
+          '/Resources << /Font << /F1 10 0 R >> /XObject << /FmC 7 0 R /Im0 8 0 R >> >>',
+        `BT /F1 14 Tf 30 600 Td (Nested two levels deep) Tj ET
+BT /F1 10 Tf 30 580 Td (Stays where it is) Tj ET
+0 0 1 rg 30 500 100 20 re f
+q 1 0 0 1 30 400 cm /FmC Do Q
+BT /F1 9 Tf 300 90 Td (Signature) Tj ET
+q 120 0 0 40 300 100 cm /Im0 Do Q`,
+      ),
+      // C: a third level, for the chain of two lifts.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 300 50] ' +
+          '/Resources << /Font << /F1 10 0 R >> >>',
+        'BT /F1 9 Tf 10 10 Td (Three levels deep) Tj ET',
+      ),
+      stream(
+        `/Type /XObject /Subtype /Image /Width ${w} /Height ${h} ` +
+          '/ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 9 0 R',
+        rgb,
+        true,
+      ),
+      stream(
+        `/Type /XObject /Subtype /Image /Width ${w} /Height ${h} ` +
+          '/ColorSpace /DeviceGray /BitsPerComponent 8',
+        alpha,
+        true,
+      ),
+      HELV,
+    ],
+    1,
+  );
+};
+
+// ---------------------------------------------------------------------------
+// 7c. The same shape under a clip that crops it: the outer form is drawn
+//     inside a frame smaller than its contents, and one of the nested lines is
+//     outside the frame. Lifting the inner form onto the page would reveal
+//     that line, so the engine must refuse rather than report success.
+// ---------------------------------------------------------------------------
+fixtures['form-xobject-clipped.pdf'] = () =>
+  buildPdf(
+    [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
+        '/Resources << /Font << /F1 7 0 R >> /XObject << /FmA 5 0 R >> >> /Contents 4 0 R >>',
+      stream(
+        '',
+        `BT /F1 12 Tf 72 740 Td (Page level line) Tj ET
+q 40 560 300 60 re W n 1 0 0 1 40 30 cm /FmA Do Q`,
+      ),
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 572 762] ' +
+          '/Resources << /Font << /F1 7 0 R >> /XObject << /FmB 6 0 R >> >>',
+        'q 1 0 0 1 10 20 cm /FmB Do Q',
+      ),
+      // In page space the first line sits inside the frame at y=600 and the
+      // second, at y=500, is cropped away entirely.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 560 740] ' +
+          '/Resources << /Font << /F1 7 0 R >> >>',
+        `BT /F1 14 Tf 30 550 Td (Nested and clipped) Tj ET
+BT /F1 14 Tf 30 450 Td (Hidden by the clip) Tj ET`,
+      ),
+      HELV,
+    ],
+    1,
+  );
 
 // ---------------------------------------------------------------------------
 // 8. Signatures as annotations: a Stamp with an appearance stream, and an Ink

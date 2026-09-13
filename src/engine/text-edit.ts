@@ -1,4 +1,3 @@
-import { ObjType } from './constants';
 import type { PdfDocument } from './document';
 import {
   chooseFallback,
@@ -8,8 +7,9 @@ import {
   measureWithFontData,
   type FallbackFont,
 } from './fonts';
+import { dissolveFormChain } from './hoist';
 import { rectWidth, setObjectMatrix, withScope, type Matrix, type Rgba } from './memory';
-import { resolvePath } from './object-path';
+import { resolveChain, resolvePath } from './object-path';
 import { getTextLines } from './text';
 import type { Badge, TextLine } from './types';
 
@@ -35,12 +35,14 @@ import type { Badge, TextLine } from './types';
  *
  * Text inside a form XObject always takes Path B, whatever its font covers.
  * `FPDFText_SetText` on a nested object reports success and then loses the
- * change on save, because regenerating the page does not rewrite a form's own
- * content stream and no API exists to regenerate one. Removing a nested object
- * *does* persist, and its bounds and matrix are already in page space, so the
- * line is removed and redrawn at page level instead. Whole documents are built
- * as one form XObject, so refusing these outright made them entirely
- * uneditable.
+ * change on save: PDFium rewrites a form's content stream only when an object
+ * has been *removed* from it, never for an object merely changed inside it —
+ * and when it does rewrite one it gets the form's `/Matrix` wrong. So a nested
+ * object is never mutated in place: `removeObjectsByPath` dissolves the forms
+ * holding it into the page (see `hoist.ts`), and a nested object's bounds and
+ * matrix are known in page space, so the line is removed and redrawn at page
+ * level. Whole documents are built as one form XObject, so refusing these
+ * outright made them entirely uneditable.
  *
  * There is no Path C. Covering the old text with a white rectangle and drawing
  * over it leaves the original glyphs in the file, still selectable and still
@@ -425,8 +427,11 @@ function describeMissing(missing: string[]): string {
 /**
  * Remove page objects by path, e.g. a flattened signature image.
  *
- * Nested objects are removed from their parent form rather than the page,
- * which is what `FPDFFormObj_RemoveObject` is for.
+ * A nested object is not removed from its parent form in place. That reaches
+ * the file only when the form sits directly on the page, and even then PDFium
+ * rewrites the form's stream with its `/Matrix` applied twice. The forms above
+ * the target are dissolved into the page first, which leaves the target an
+ * ordinary page object — see `hoist.ts` for why that is the only route.
  */
 export function removeObjectsByPath(
   doc: PdfDocument,
@@ -438,25 +443,25 @@ export function removeObjectsByPath(
   let removed = 0;
 
   // Resolve everything up front: each removal invalidates the indices used by
-  // later paths.
+  // later paths, and dissolving a form rewrites the tree above them.
   const targets = paths
-    .map((path) => ({ path, handle: resolvePath(mod, page, path) }))
-    .filter((t) => t.handle !== 0);
+    .map((path) => ({ handle: resolvePath(mod, page, path), chain: resolveChain(mod, page, path) }))
+    .filter((t): t is { handle: number; chain: number[] } => t.handle !== 0 && t.chain !== null);
 
-  for (const { path, handle } of targets) {
-    if (path.length === 1) {
-      if (mod.FPDFPage_RemoveObject(page, handle)) {
-        mod.FPDFPageObj_Destroy(handle);
-        removed++;
-      }
-    } else {
-      const form = resolvePath(mod, page, path.slice(0, -1));
-      if (form && mod.FPDFPageObj_GetType(form) === ObjType.Form) {
-        if (mod.FPDFFormObj_RemoveObject(form, handle)) removed++;
-      }
+  const dissolved = new Set<number>();
+
+  for (const { handle, chain } of targets) {
+    if (chain.length > 0) dissolveFormChain(doc, pageIndex, chain, dissolved);
+
+    if (mod.FPDFPage_RemoveObject(page, handle)) {
+      mod.FPDFPageObj_Destroy(handle);
+      removed++;
     }
   }
 
-  if (removed > 0) doc.markDirty(pageIndex);
+  // A dissolved form is an edit to the page even if the removal after it
+  // failed: leaving the page unregenerated would save the original stream
+  // while the screen shows the dissolved one.
+  if (removed > 0 || dissolved.size > 0) doc.markDirty(pageIndex);
   return removed;
 }
