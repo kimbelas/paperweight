@@ -1302,14 +1302,11 @@ function SelectionOutline({
   hint?: string;
   renderToken: number;
   onMove: (dx: number, dy: number) => void | Promise<void>;
-  /** A click on the outline that did not turn into a drag. */
+  /** A press on the outline that did not travel far enough to be a drag. */
   onActivate?: () => void;
 }) {
   const [found, setFound] = useState<Rect | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
-  // Set by a drag, read by the click that follows every pointer-up, so a drop
-  // is never also taken as a click.
-  const dragged = useRef(false);
   const key = paths.map((p) => p.join('.')).join('|');
 
   useEffect(() => {
@@ -1355,10 +1352,19 @@ function SelectionOutline({
         window.removeEventListener('pointerup', up);
         setDrag(null);
 
-        // Ignore a click that merely wobbled, so selecting something does not
-        // nudge it a pixel and leave an undo entry behind.
-        dragged.current = Math.hypot(last.x, last.y) >= 3;
-        if (!dragged.current) return;
+        // A press that barely travelled is a click, not a drag: it must not
+        // nudge anything a pixel or leave an undo entry behind, and on a form
+        // field it is what opens the value.
+        //
+        // Decided here rather than in a click handler. The pointerdown above
+        // calls `preventDefault` so a touch drag does not scroll the page
+        // instead, and WebKit then never synthesises the click that would
+        // follow — which is exactly how this shipped broken on a phone while
+        // passing in Chromium and Firefox.
+        if (Math.hypot(last.x, last.y) < 3) {
+          onActivate?.();
+          return;
+        }
         const { dx, dy } = cssDeltaToPdf(transform, last.x, last.y);
         void onMove(dx, dy);
       };
@@ -1366,7 +1372,7 @@ function SelectionOutline({
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup', up);
     },
-    [transform, onMove],
+    [transform, onMove, onActivate],
   );
 
   if (!rect) return null;
@@ -1383,13 +1389,6 @@ function SelectionOutline({
         transform: drag ? `translate(${drag.x}px, ${drag.y}px)` : undefined,
       }}
       onPointerDown={startDrag}
-      onClick={() => {
-        if (dragged.current) {
-          dragged.current = false;
-          return;
-        }
-        onActivate?.();
-      }}
       role="group"
       aria-label={`Selected: ${label}. Drag to move.`}
     >
