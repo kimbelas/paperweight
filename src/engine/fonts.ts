@@ -308,18 +308,20 @@ export function measureWithFontData(data: Uint8Array, text: string, size: number
  * Handles are cached per document: loading the same face repeatedly would
  * embed it repeatedly and inflate the file.
  */
-const loadedFonts = new WeakMap<PdfDocument, Map<string, number>>();
+const loadedFonts = new WeakMap<PdfDocument, { generation: number; fonts: Map<string, number> }>();
 
 export async function loadFallbackIntoDocument(
   doc: PdfDocument,
   fallback: FallbackFont,
 ): Promise<number> {
   let perDoc = loadedFonts.get(doc);
-  if (!perDoc) {
-    perDoc = new Map();
+  if (!perDoc || perDoc.generation !== doc.generation) {
+    // A reload voids every handle PDFium issued for the document, this cache
+    // included: a font handle from before it points at freed memory.
+    perDoc = { generation: doc.generation, fonts: new Map() };
     loadedFonts.set(doc, perDoc);
   }
-  const cached = perDoc.get(fallback.key);
+  const cached = perDoc.fonts.get(fallback.key);
   if (cached) return cached;
 
   const data = await loadFontFile(fallback.file);
@@ -336,7 +338,7 @@ export async function loadFallbackIntoDocument(
   if (!handle) {
     throw new Error(`The fallback font ${fallback.standsFor} could not be embedded.`);
   }
-  perDoc.set(fallback.key, handle);
+  perDoc.fonts.set(fallback.key, handle);
   return handle;
 }
 

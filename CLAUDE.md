@@ -202,6 +202,44 @@ the decisions. `docs/research/01-editing-engines.md` and
   model, and was caught only by an e2e test that looked at pixels — which is
   the argument for keeping both.
 
+- **Removing a widget must remove its field from the tree, and PDFium will
+  not do it.** `FPDFPage_RemoveAnnot` edits the page's `/Annots` and nothing
+  else. The field stays in `/AcroForm /Fields` — or in its parent's `/Kids` —
+  with its rectangle, its page and its value. PDFium draws widgets from
+  `/Annots`, so the editor showed the field gone; Acrobat builds its form from
+  the field tree, so the download showed it back, old value and all. Reported
+  as "deleting a field removes it in the editor, but when I download and open
+  it in Adobe it's still there", which is the exact shape of failure this app
+  exists to not have: the screen and the file disagreeing.
+
+  No public PDFium call edits that array, and the embedpdf build has none
+  either (its redaction path detaches widgets, but redaction also destroys the
+  page content under them). So `removeAnnotations` reads the widgets' object
+  numbers *before* removing anything — an annotation that has left `/Annots`
+  cannot be opened again — hands `save()`'s bytes to `field-tree.ts`, which
+  blanks each `N 0 R` reference with spaces of the same length so no
+  cross-reference offset moves, prunes any parent left childless, cleans
+  `/CO`, and then reloads the document from the result with
+  `PdfDocument.reload`. Reloading rather than patching at every save keeps one
+  truth in memory and has PDFium parse the edited file at once, instead of
+  Acrobat being the first to try. It is the same route for a deleted field, a
+  removed signature field and a field converted to text; all three had the
+  bug.
+
+  Two consequences. A reload voids every handle PDFium issued — pages,
+  annotations, text pages, fonts — so `PdfDocument.generation` exists for
+  caches keyed by the document (`fonts.ts` checks it), and nothing may hold a
+  handle across `removeAnnotations`. And an annotation is not page content, so
+  the removal no longer marks the page dirty: the session passes the page in
+  `repaint` instead, exactly as a form edit does.
+
+  The parser in `field-tree.ts` is narrow on purpose: PDFium's non-incremental
+  save writes a classic `xref` table and no object streams (checked against
+  `cpdf_creator.cpp`), and its writer emits only objects the catalog reaches,
+  so a detached field's dictionary is gone from the file on the next save.
+  `field-tree.pdf` pins every tree shape the walk has to handle; the tests read
+  the saved bytes with their own regexes rather than the module's parser.
+
 - **Record appearance sizes before the form environment exists.**
   `snapshotAppearanceSizes` runs in `PdfDocument.open` *before*
   `FPDFDOC_InitFormFillEnvironment`, because PDFium generates an appearance

@@ -1,4 +1,5 @@
 import { expect, test, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { waitForLanding } from './helpers';
 
@@ -137,6 +138,46 @@ test('Clear this value empties the field on the page', async ({ page }) => {
   await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 40_000 });
   await page.waitForTimeout(800);
   expect(await inkIn(page, SURNAME_RECT)).toBe(0);
+});
+
+/**
+ * Deleting a field has to delete it from the file, not just from the screen.
+ *
+ * Reported as: "deleting a field removes it in the editor, but when I download
+ * and open it in Adobe it's still there." Removing the widget annotation
+ * empties the page's /Annots, which is all PDFium draws from -- but the field
+ * stayed in /AcroForm /Fields, and Acrobat rebuilds widgets from that tree.
+ * So this test reads the bytes the download produced, the way Acrobat would,
+ * as well as the pixels.
+ */
+test('Delete this field takes the field out of the saved file', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  expect(await inkIn(page, SURNAME_RECT)).toBeGreaterThan(0);
+
+  const { x, y } = await pointAt(page, 350, 665);
+  await page.mouse.click(x, y, { button: 'right' });
+  await page.getByRole('menuitem', { name: /delete this field/i }).click();
+
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 40_000 });
+  await page.waitForTimeout(800);
+  expect(await inkIn(page, SURNAME_RECT)).toBe(0);
+
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: /^download$/i }).click();
+  const saved = await readFile((await (await downloadPromise).path())!);
+  const text = saved.toString('latin1');
+
+  // filled-form.pdf lists its four fields directly in /Fields, Surname as
+  // object 5. The other three must still be there; Surname must not be
+  // referenced, and its dictionary must not be in the file at all.
+  const fields = text.match(/\/Fields\s*\[([^\]]*)\]/);
+  expect(fields).not.toBeNull();
+  const listed = [...fields![1].matchAll(/(\d+) 0 R/g)].map((m) => Number(m[1]));
+  expect(listed).toEqual([6, 8, 10]);
+  expect(text).not.toMatch(/[\r\n]5 0 obj/);
+  expect(text).not.toContain('/T(Surname)');
+  expect(text).toContain('/T(GivenNames)');
 });
 
 test('right-clicking a ticked box offers to untick it', async ({ page }) => {
