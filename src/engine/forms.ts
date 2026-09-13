@@ -386,6 +386,74 @@ export function setFormFieldWidth(doc: PdfDocument, field: FormFieldInfo, width:
   return clamped;
 }
 
+/**
+ * Move a field by a delta in points, keeping its size.
+ *
+ * Position is the user's to change, as width is; only the type size is not.
+ * A translation needs no appearance rebuild — the appearance stream is drawn
+ * relative to `/Rect`, so it travels with the box — but the form-fill
+ * environment caches a widget's geometry for as long as the page is open, so
+ * the page is reloaded afterwards for the same reason `setFormFieldWidth`
+ * does: without it a click on the moved box lands on the widget PDFium still
+ * believes is at the old place.
+ *
+ * The box is kept inside the page's own box, read from the page rather than
+ * taken from its width and height: `/Rect` is in unrotated user space, and on
+ * a rotated page those two are the wrong way round.
+ */
+export function moveFormField(
+  doc: PdfDocument,
+  field: FormFieldInfo,
+  dx: number,
+  dy: number,
+): Rect {
+  const { mod } = doc;
+  const width = field.rect.right - field.rect.left;
+  const height = field.rect.top - field.rect.bottom;
+  const page = pageBox(doc, field.page);
+
+  const left = Math.max(
+    page.left + PAGE_MARGIN,
+    Math.min(page.right - PAGE_MARGIN - width, field.rect.left + dx),
+  );
+  const bottom = Math.max(
+    page.bottom + PAGE_MARGIN,
+    Math.min(page.top - PAGE_MARGIN - height, field.rect.bottom + dy),
+  );
+  const rect: Rect = { left, bottom, right: left + width, top: bottom + height };
+
+  withFieldAnnot(doc, field.page, field.name, (annot) => {
+    withScope(mod, (scope) => {
+      const ptr = scope.allocRectF();
+      // FS_RECTF is left, top, right, bottom.
+      mod.pdfium.setValue(ptr, rect.left, 'float');
+      mod.pdfium.setValue(ptr + 4, rect.top, 'float');
+      mod.pdfium.setValue(ptr + 8, rect.right, 'float');
+      mod.pdfium.setValue(ptr + 12, rect.bottom, 'float');
+      if (!mod.FPDFAnnot_SetRect(annot, ptr)) {
+        throw new Error('That field could not be moved.');
+      }
+    });
+  });
+
+  doc.invalidatePage(field.page);
+  return rect;
+}
+
+/** The page's own box in user space, which is the space `/Rect` lives in. */
+function pageBox(doc: PdfDocument, pageIndex: number): Rect {
+  const { mod } = doc;
+  const page = doc.page(pageIndex);
+  return withScope(mod, (scope) => {
+    const ptr = scope.allocRectF();
+    if (!mod.FPDF_GetPageBoundingBox(page, ptr)) {
+      const info = doc.pageInfo(pageIndex);
+      return { left: 0, bottom: 0, right: info.width, top: info.height };
+    }
+    return readRectF(mod, ptr);
+  });
+}
+
 /** The middle of a field, which is the safest point to aim a synthetic click at. */
 function centreOf(field: FormFieldInfo): { x: number; y: number } {
   return {

@@ -10,6 +10,7 @@ import {
   formFieldByName,
   listFormFields,
   measureFieldFit,
+  moveFormField,
   setFormFieldText,
   setFormFieldWidth,
   toggleFormField,
@@ -316,6 +317,24 @@ export class EditorSession {
             },
           ];
         }
+        return [];
+      },
+      false,
+      [pageIndex],
+    );
+  }
+
+  /**
+   * Move a field by a delta in points.
+   *
+   * Repainted, not regenerated, like every other form edit: the change is to
+   * the widget's rectangle, and nothing in the content stream moved.
+   */
+  moveFormField(pageIndex: number, name: string, dx: number, dy: number): CommitResult {
+    return this.commitSync(
+      'Move form field',
+      (doc) => {
+        moveFormField(doc, this.findField(doc, pageIndex, name), dx, dy);
         return [];
       },
       false,

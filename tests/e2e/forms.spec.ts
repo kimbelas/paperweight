@@ -159,6 +159,61 @@ test('ticking a box toggles it rather than opening an editor', async ({ page }) 
 });
 
 /**
+ * Moving a field.
+ *
+ * In the Select tool a field is selected like anything else on the page, and
+ * the outline is the drag handle. Editing is a second click away, and the
+ * outline says so — the first click must never look like nothing happened.
+ */
+test('selects a field with the Select tool and drags it into place', async ({ page }) => {
+  await openApp(page);
+  await openForm(page);
+
+  const before = await inkIn(page, SURNAME_RECT);
+  expect(before).toBeGreaterThan(0);
+
+  // Select is the default tool; armed explicitly so the test says what it means.
+  await page.getByRole('button', { name: 'Select' }).click();
+  await clickPdf(page, SURNAME_VALUE.x, SURNAME_VALUE.y);
+
+  const outline = page.locator('[role="group"][aria-label^="Selected:"]');
+  await expect(outline).toBeVisible();
+  await expect(outline).toHaveAttribute('aria-label', /Surname/);
+  await expect(page.getByText('Click again to edit')).toBeVisible();
+  // Not an editor: that is what the second click is for.
+  await expect(page.getByRole('textbox', { name: /edit this line of text/i })).toHaveCount(0);
+
+  const box = (await outline.boundingBox())!;
+  const canvas = (await page.locator('canvas[aria-label="Page 1"]').boundingBox())!;
+  const dropCss = 60;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + dropCss, { steps: 10 });
+  await expect(page.getByText('Release to place')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+
+  // The value is drawn where the field was dropped, straight down the page,
+  // and no longer where it was. Converted through the displayed zoom.
+  const dropPt = dropCss / (canvas.height / 792);
+  const moved = {
+    left: SURNAME_RECT.left,
+    right: SURNAME_RECT.right,
+    bottom: SURNAME_RECT.bottom - dropPt,
+    top: SURNAME_RECT.top - dropPt,
+  };
+  await expect.poll(() => inkIn(page, moved), { timeout: 30_000 }).toBeGreaterThan(0);
+  expect(await inkIn(page, SURNAME_RECT)).toBeLessThan(before);
+
+  // The selection followed the field, so one more click on it opens the value.
+  await clickPdf(page, SURNAME_VALUE.x, SURNAME_VALUE.y - dropPt);
+  const input = page.getByRole('textbox', { name: /edit this line of text/i });
+  await expect(input).toBeVisible({ timeout: 20_000 });
+  await expect(input).toHaveValue('DOE');
+});
+
+/**
  * Widening a field.
  *
  * A field clips its appearance to its own rectangle, so a value wider than
@@ -527,10 +582,16 @@ test.describe('on a phone', () => {
 
     const canvas = page.locator('canvas[aria-label="Page 1"]');
     const box = (await canvas.boundingBox())!;
-    await page.touchscreen.tap(
-      box.x + SURNAME_VALUE.x * (box.width / 612),
-      box.y + (792 - SURNAME_VALUE.y) * (box.height / 792),
-    );
+    const at = {
+      x: box.x + SURNAME_VALUE.x * (box.width / 612),
+      y: box.y + (792 - SURNAME_VALUE.y) * (box.height / 792),
+    };
+
+    // The Select tool is armed on opening: the first tap selects the field
+    // and the outline says a second one edits it.
+    await page.touchscreen.tap(at.x, at.y);
+    await expect(page.locator('[role="group"][aria-label^="Selected:"]')).toBeVisible();
+    await page.touchscreen.tap(at.x, at.y);
 
     const input = page.getByRole('textbox', { name: /edit this line of text/i });
     await expect(input).toBeVisible({ timeout: 20_000 });

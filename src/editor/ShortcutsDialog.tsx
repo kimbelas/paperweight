@@ -55,7 +55,11 @@ const GROUPS: { title: string; items: [string, string][] }[] = [
   {
     title: 'Pointer',
     items: [
-      ['Click', 'A form field opens for editing, whichever tool is armed'],
+      [
+        'Click',
+        'Select what is under the cursor; in the Edit text tool a form field opens at once',
+      ],
+      ['Click again', 'Edit the selected form field, or press Enter'],
       ['Right-click', 'What can be done to the thing under the cursor'],
       ['Right-click', 'On a page in the rail: rotate, reorder, insert, delete'],
       ['Drag', 'Move whatever is selected'],

@@ -58,7 +58,7 @@ const TOOLS: ToolSpec[] = [
   {
     id: 'select',
     label: 'Select',
-    hint: 'Click anything on the page — text, a shape, an image — to select it, then drag to move it or press Delete to remove it. Clicking a form field edits it straight away.',
+    hint: 'Click anything on the page — text, a shape, an image, a form field — to select it, then drag to move it or press Delete to remove it. Click a selected field again to edit its value.',
     Icon: IconSelect,
     key: 'V',
   },

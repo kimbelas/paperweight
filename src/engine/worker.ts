@@ -83,6 +83,8 @@ const api = {
     session.fitFormFieldWidth(pageIndex, name),
   measureFormField: (pageIndex: number, name: string, value: string) =>
     session.measureFormField(pageIndex, name, value),
+  moveFormField: (pageIndex: number, name: string, dx: number, dy: number) =>
+    session.moveFormField(pageIndex, name, dx, dy),
   removeSignatureById: (id: string) => session.removeSignatureById(id),
   removeObjects: (pageIndex: number, paths: number[][]) => session.removeObjects(pageIndex, paths),
   removeAnnotationsAt: (pageIndex: number, indices: number[]) =>

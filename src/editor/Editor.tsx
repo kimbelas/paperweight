@@ -32,7 +32,7 @@ import { StatusBar } from './StatusBar';
 import { Thumbnails, type PageActions } from './Thumbnails';
 import { Toolbar } from './Toolbar';
 import { ToolRail } from './ToolRail';
-import { nextOverlayId, toPlacements, useEditor } from './store';
+import { fieldSelection, nextOverlayId, toPlacements, useEditor } from './store';
 import { useEngine, useEngineHealth } from './useEngine';
 
 /**
@@ -343,11 +343,6 @@ export default function Editor() {
     [engine, absorb, notify, setSelection],
   );
 
-  const deleteSelection = useCallback(async () => {
-    if (!selection) return;
-    await deleteObjects(selection.page, selection.paths);
-  }, [selection, deleteObjects]);
-
   /** Widen a field so its current value is not clipped by its own box. */
   const widenField = useCallback(
     async (field: FormFieldInfo) => {
@@ -493,6 +488,41 @@ export default function Editor() {
     },
     [engine, absorb, notify, setSelection],
   );
+
+  /**
+   * Commit a drag of a form field.
+   *
+   * Unlike `moveSelection` this keeps the selection, re-read from the engine
+   * so its rectangle is the moved one: a field is nudged into place over
+   * several drags more often than in one, and `deleteField` finds the widget
+   * by its rectangle.
+   */
+  const moveField = useCallback(
+    async (field: FormFieldInfo, dx: number, dy: number) => {
+      setBusy('Moving…');
+      try {
+        await absorb(await engine.moveFormField(field.page, field.name, dx, dy));
+        const moved = (await engine.formFields(field.page)).find((f) => f.name === field.name);
+        setSelection(moved ? fieldSelection(moved) : null);
+      } catch (error) {
+        notify('error', describe(error, 'That field could not be moved.'));
+      } finally {
+        setBusy(null);
+      }
+    },
+    [engine, absorb, notify, setSelection],
+  );
+
+  /** Delete whatever the Select tool is holding: a field's widget, or page objects. */
+  const deleteSelection = useCallback(async () => {
+    if (!selection) return;
+    if (selection.field) {
+      await deleteField(selection.field);
+      setSelection(null);
+      return;
+    }
+    await deleteObjects(selection.page, selection.paths);
+  }, [selection, deleteObjects, deleteField, setSelection]);
 
   /**
    * Write pending overlay items into the document.
@@ -1039,6 +1069,7 @@ export default function Editor() {
                     onCommitField={commitFormField}
                     onToggleField={toggleFormField}
                     onMoveSelection={moveSelection}
+                    onMoveField={moveField}
                     onDeleteObjects={deleteObjects}
                     onWidenField={widenField}
                     onDeleteField={deleteField}

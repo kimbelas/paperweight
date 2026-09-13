@@ -118,6 +118,20 @@ the decisions. `docs/research/01-editing-engines.md` and
   with the box holding the answer, so asking the text layer first offers to
   edit the caption instead of the field.
 
+  **In the Select tool a click selects a field; in the Edit text tool it edits
+  it at once.** Selecting is what that tool does to everything else, and it is
+  how a field is moved: the outline is the drag handle, exactly as for a line
+  of text, and a second click on it or Enter opens the value. This replaced
+  "a click edits, whichever tool is armed" and keeps its point — a form must
+  never look inert when clicked — by having the first click answer visibly,
+  with a chip that says what the next one does. `moveFormField` translates
+  `/Rect` and rebuilds nothing, since an appearance stream is drawn relative
+  to the box and travels with it, but it must reload the page for the same
+  cached-geometry reason as `setFormFieldWidth`. The box is clamped to the
+  page's own bounding box, read from the page, because `/Rect` is in
+  unrotated user space and the rotated width and height are the wrong
+  yardstick.
+
   A form edit repaints its page but must never mark it dirty. The value is in
   the form, not the content stream, so there is nothing to regenerate, and
   calling `GenerateContent` would rewrite a page the user never edited.
@@ -161,7 +175,8 @@ the decisions. `docs/research/01-editing-engines.md` and
   PDFium takes it literally: on a 24pt-tall widget it picks **18pt**, where the
   rest of the form sits at 9pt. Worse, the oversized value no longer fits its
   own rectangle, and a field clips to its rectangle — so the value comes back
-  both huge *and* truncated. Width is the user's to change; size is not.
+  both huge *and* truncated. Position and width are the user's to change;
+  size is not.
 
   `drawnSize` answers in four steps and never returns "auto": an explicit
   `/DA` size is the document's own decision and is left alone; else the size
