@@ -274,6 +274,20 @@ test('serves the files search engines and installers look for', async ({ request
   expect(robotsBody).toContain('Allow: /');
   expect(robotsBody).toContain(`Sitemap: ${SITE_URL}/sitemap.xml`);
   expect(robotsBody).toContain('Content-Signal: search=yes, ai-input=yes');
+
+  // The signals are only terms if the text defining them travels with them.
+  // This shipped without the preamble for a while on the strength of a
+  // comment saying Cloudflare prepends it on a workers.dev host — it does
+  // not, and nothing anywhere reports the difference, because a robots.txt
+  // is valid either way and no crawler complains about a directive it does
+  // not recognise. `scripts/write-robots.mjs` puts it there now.
+  expect(robotsBody.startsWith('#'), 'robots.txt has no Content Signals preamble').toBe(true);
+  expect(robotsBody).toContain('search: building a search index');
+  expect(robotsBody).toContain('ai-input: inputting the content into one or more AI models');
+  // The definitions must come before the directive they define.
+  expect(robotsBody.indexOf('# As a condition')).toBeLessThan(
+    robotsBody.indexOf('Content-Signal:'),
+  );
   // Nothing is blocked, deliberately: an answer engine that cannot read the
   // page describes it from someone else's guess instead.
   expect(robotsBody).not.toContain('Disallow');

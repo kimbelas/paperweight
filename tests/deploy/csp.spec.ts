@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { expect, test, type Page } from '@playwright/test';
 import { waitForLanding } from '../e2e/helpers';
@@ -74,6 +75,44 @@ async function watch(page: Page): Promise<() => Promise<string[]>> {
     )),
   ];
 }
+
+/**
+ * The workers.dev copies are told not to be indexed.
+ *
+ * This one is asserted against the `_headers` file rather than over HTTP,
+ * and the reason is the rule itself: it keys on a `*.workers.dev` hostname,
+ * and nothing under `wrangler dev` or a static server has one. A request
+ * that could exercise it can only be made against the real deployment.
+ *
+ * So this proves the rule was written and survives a rebuild — not that
+ * Cloudflare honours it. The syntax is Cloudflare's own documented example
+ * for exactly this purpose, and the remaining check is a `curl -I` against
+ * a deployed preview URL, which `TASKS.md` tracks with the other manual
+ * passes.
+ *
+ * Worth having anyway: the Worker answers on its own name and every preview
+ * deployment gets one, so without this the whole site has two more indexable
+ * copies, and the only thing arguing otherwise is a canonical, which is a
+ * hint.
+ */
+test('the workers.dev hosts are marked noindex', async () => {
+  const headers = await readFile(join(process.cwd(), 'out', '_headers'), 'utf8');
+
+  expect(headers, 'no workers.dev rule in _headers').toContain(
+    'https://:version.:subdomain.workers.dev/*',
+  );
+
+  // The header has to be under that pattern, not under `/*` — applied to
+  // everything it would deindex the site it is meant to protect.
+  const rule = headers
+    .split(/^(?=\S)/m)
+    .find((block) => block.startsWith('https://:version.:subdomain.workers.dev/*'));
+  expect(rule).toBeDefined();
+  expect(rule).toContain('X-Robots-Tag: noindex');
+
+  const siteWide = headers.split(/^(?=\S)/m).find((block) => block.startsWith('/*'));
+  expect(siteWide, 'the whole site is marked noindex').not.toContain('X-Robots-Tag');
+});
 
 test('the page, the worker scripts and the 404 page carry the headers', async ({ request }) => {
   for (const path of ['/', '/engine-worker.js', '/tesseract/worker.min.js', '/no-such-page']) {
