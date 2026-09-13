@@ -9,8 +9,9 @@ import { waitForLanding } from './helpers';
  * Three things are covered here, all of them interface behaviour that the
  * engine tests cannot see.
  *
- * A click on a form field opens it for editing whatever tool is armed. This
- * used to require picking the Edit text tool first, and a form that does
+ * A click on a form field answers whatever tool is armed: the Edit text tool
+ * opens it for editing at once, and the Select tool selects it — outline,
+ * drag handle, and a chip saying a second click edits. A form that does
  * nothing when you click it reads as a form that cannot be filled in.
  *
  * A right-click offers what can be done to the thing under it — which is the
@@ -87,7 +88,9 @@ async function inkIn(
   }, rect);
 }
 
-test('clicking a form field edits it without picking a tool first', async ({ page }) => {
+test('clicking a form field selects it, and a second click edits it, without picking a tool first', async ({
+  page,
+}) => {
   const errors = await openApp(page);
   await openFixture(page, 'filled-form.pdf');
 
@@ -100,6 +103,15 @@ test('clicking a form field edits it without picking a tool first', async ({ pag
   const { x, y } = await pointAt(page, 350, 665);
   await page.mouse.click(x, y);
 
+  // The first click answers with the outline rather than an editor: the
+  // Select tool treats a field like anything else on the page, and the chip
+  // says what the next click does.
+  const outline = page.locator('[role="group"][aria-label^="Selected:"]');
+  await expect(outline).toBeVisible();
+  await expect(outline).toHaveAttribute('aria-label', /Surname/);
+  await expect(page.getByText('Click again to edit')).toBeVisible();
+
+  await page.mouse.click(x, y);
   const input = page.getByRole('textbox', { name: /edit this line of text/i });
   await expect(input).toBeVisible();
   await expect(input).toHaveValue(/DOE/i);

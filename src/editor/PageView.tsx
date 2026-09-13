@@ -28,7 +28,7 @@ import {
 import { toImageData } from './imageData';
 import { InlineTextEditor } from './InlineTextEditor';
 import { OverlayLayer } from './OverlayLayer';
-import { nextOverlayId, useEditor } from './store';
+import { fieldSelection, nextOverlayId, useEditor } from './store';
 import {
   cssDeltaToPdf,
   cssRectToPdf,
@@ -61,6 +61,8 @@ interface PageViewProps {
   onCommitField: (field: FormFieldInfo, text: string, width?: number) => Promise<void>;
   onToggleField: (field: FormFieldInfo) => Promise<void>;
   onMoveSelection: (page: number, paths: number[][], dx: number, dy: number) => Promise<void>;
+  /** Move a selected form field by a delta in PDF points. */
+  onMoveField: (field: FormFieldInfo, dx: number, dy: number) => Promise<void>;
   /** Delete named objects outright, without selecting them first. */
   onDeleteObjects: (page: number, paths: number[][]) => Promise<void>;
   /** Widen a field to hold its current value. */
@@ -109,6 +111,7 @@ export function PageView({
   onCommitField,
   onToggleField,
   onMoveSelection,
+  onMoveField,
   onDeleteObjects,
   onWidenField,
   onDeleteField,
@@ -308,10 +311,11 @@ export function PageView({
   /**
    * Put a form field into the state a click on it should produce.
    *
-   * A field is offered for editing whatever tool is armed. Clicking a box and
-   * having it come alive is what every PDF viewer does, and demanding that the
-   * right tool be picked first was the difference between "this app fills in
-   * forms" and "this app does nothing when I click the form".
+   * Clicking a box and having it come alive is what every PDF viewer does,
+   * and a form that does nothing when clicked reads as a form that cannot be
+   * filled in. The Edit text tool does this on the first click. The Select
+   * tool, whose job is arranging things, selects the field first — see
+   * `selectField` — and comes here on the next click, or on Enter.
    */
   const activateField = useCallback(
     async (field: FormFieldInfo) => {
@@ -332,6 +336,46 @@ export function PageView({
     },
     [setEditingLine, setSelection, selectOverlay, onToggleField, notify],
   );
+
+  /**
+   * Select a form field, so it can be dragged or deleted like anything else.
+   *
+   * What the Select tool does to everything on the page, done to a field: the
+   * outline is the drag handle. Editing is one click away — on the outline,
+   * or Enter — and the outline's chip says so, which keeps a form visibly
+   * alive on the first click without turning the drag handle into a text box.
+   */
+  const selectField = useCallback(
+    (field: FormFieldInfo) => {
+      setEditingLine(null);
+      setOcrTarget(null);
+      setFieldTarget(null);
+      selectOverlay(null);
+      setSelection(fieldSelection(field));
+    },
+    [setEditingLine, selectOverlay, setSelection],
+  );
+
+  // Enter edits the selected field, as the outline promises. Only the page
+  // holding the selection listens, and never while something is being typed.
+  useEffect(() => {
+    const field = selection?.page === page.index ? selection.field : undefined;
+    if (!field) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter') return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      void activateField(field);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selection, page.index, activateField]);
 
   /** Select an object so it can be dragged or deleted. */
   const selectObject = useCallback(
@@ -523,11 +567,14 @@ export function PageView({
     async (event: React.MouseEvent) => {
       const { x, y } = localPoint(event);
 
-      // Asked first, and for every tool. See `activateField`.
+      // Asked first, for both tools that answer a click. The Edit text tool
+      // edits the field at once; the Select tool selects it, and the outline
+      // takes the next click. See `activateField` and `selectField`.
       if (tool === 'edit-text' || tool === 'select') {
         const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
         if (field) {
-          await activateField(field);
+          if (tool === 'select') selectField(field);
+          else await activateField(field);
           return;
         }
       }
@@ -580,6 +627,7 @@ export function PageView({
       localPoint,
       findEditable,
       activateField,
+      selectField,
       selectObject,
       addTextAt,
       placeMark,
@@ -721,6 +769,14 @@ export function PageView({
             onSelect: () => {},
           });
         }
+
+        entries.push({
+          id: 'select',
+          label: 'Select it',
+          hint: 'Then drag it to move it',
+          icon: <IconSelect size={15} />,
+          onSelect: () => selectField(field),
+        });
 
         entries.push({ id: 's1', separator: true });
         entries.push({
@@ -1018,6 +1074,8 @@ export function PageView({
           ? 'crosshair'
           : 'default';
 
+  const selectedField = selection && selection.page === page.index ? selection.field : undefined;
+
   return (
     <div
       ref={wrapperRef}
@@ -1091,9 +1149,16 @@ export function PageView({
           transform={transform}
           page={page.index}
           paths={selection.paths}
+          rect={selectedField?.rect}
           label={selection.label}
+          hint={selectedField ? 'Drag to move · Click again to edit · Delete to remove' : undefined}
           renderToken={renderToken}
-          onMove={(dx, dy) => onMoveSelection(page.index, selection.paths, dx, dy)}
+          onMove={(dx, dy) =>
+            selectedField
+              ? onMoveField(selectedField, dx, dy)
+              : onMoveSelection(page.index, selection.paths, dx, dy)
+          }
+          onActivate={selectedField ? () => void activateField(selectedField) : undefined}
         />
       )}
 
@@ -1216,23 +1281,39 @@ function SelectionOutline({
   transform,
   page,
   paths,
+  rect: fixed,
   label,
+  hint,
   renderToken,
   onMove,
+  onActivate,
 }: {
   engine: Engine;
   transform: PageTransform;
   page: number;
   paths: number[][];
+  /**
+   * The box to outline, when it is known outright — a form field's own
+   * rectangle. Otherwise it is the union of the objects at `paths`.
+   */
+  rect?: Rect;
   label: string;
+  /** What the chip above the outline says while nothing is being dragged. */
+  hint?: string;
   renderToken: number;
   onMove: (dx: number, dy: number) => void | Promise<void>;
+  /** A click on the outline that did not turn into a drag. */
+  onActivate?: () => void;
 }) {
-  const [rect, setRect] = useState<Rect | null>(null);
+  const [found, setFound] = useState<Rect | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
+  // Set by a drag, read by the click that follows every pointer-up, so a drop
+  // is never also taken as a click.
+  const dragged = useRef(false);
   const key = paths.map((p) => p.join('.')).join('|');
 
   useEffect(() => {
+    if (fixed) return;
     let cancelled = false;
     engine
       .objects(page)
@@ -1242,13 +1323,15 @@ function SelectionOutline({
         const hit = objects.filter((o) => wanted.has(o.path.join('.')));
         // The union, so a line made of many objects gets one outline rather
         // than a box around each word.
-        setRect(hit.length === 0 ? null : hit.map((o) => o.bounds).reduce(unionRect));
+        setFound(hit.length === 0 ? null : hit.map((o) => o.bounds).reduce(unionRect));
       })
-      .catch(() => setRect(null));
+      .catch(() => setFound(null));
     return () => {
       cancelled = true;
     };
-  }, [engine, page, key, renderToken]);
+  }, [engine, page, key, renderToken, fixed]);
+
+  const rect = fixed ?? found;
 
   const startDrag = useCallback(
     (event: React.PointerEvent) => {
@@ -1274,7 +1357,8 @@ function SelectionOutline({
 
         // Ignore a click that merely wobbled, so selecting something does not
         // nudge it a pixel and leave an undo entry behind.
-        if (Math.hypot(last.x, last.y) < 3) return;
+        dragged.current = Math.hypot(last.x, last.y) >= 3;
+        if (!dragged.current) return;
         const { dx, dy } = cssDeltaToPdf(transform, last.x, last.y);
         void onMove(dx, dy);
       };
@@ -1299,6 +1383,13 @@ function SelectionOutline({
         transform: drag ? `translate(${drag.x}px, ${drag.y}px)` : undefined,
       }}
       onPointerDown={startDrag}
+      onClick={() => {
+        if (dragged.current) {
+          dragged.current = false;
+          return;
+        }
+        onActivate?.();
+      }}
       role="group"
       aria-label={`Selected: ${label}. Drag to move.`}
     >
@@ -1306,7 +1397,7 @@ function SelectionOutline({
         className="pointer-events-none absolute whitespace-nowrap rounded px-1.5 py-0.5 text-[11px]"
         style={{ top: -21, left: 0, background: 'var(--app-selection)', color: '#fff' }}
       >
-        {drag ? 'Release to place' : 'Drag to move · Delete to remove'}
+        {drag ? 'Release to place' : (hint ?? 'Drag to move · Delete to remove')}
       </span>
     </div>
   );

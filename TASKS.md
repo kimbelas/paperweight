@@ -157,6 +157,8 @@ engine layer and its tests instead of being discarded.
       its answer box _(High, Large)_
 - [x] Adjustable field width: drag the editor's right edge or use Widen to fit,
       with a warning when a value would be cut off in the file _(High, Medium)_
+- [x] Move a form field: the Select tool selects it, the outline is the drag
+      handle, and a second click or Enter edits the value _(Medium, Medium)_
 - [x] Keep an edited field's drawn size: resolve a `0 Tf` auto size from the
       file, from the rest of the form, or from the box — never from PDFium's
       auto, which blows the type up and then truncates it _(High, Medium)_

@@ -163,9 +163,11 @@ export function PropertiesPanel({ onDeleteSelection }: PropertiesPanelProps) {
           )}
 
           <p className="mb-2 text-[11px] leading-snug" style={{ color: 'var(--app-text-faint)' }}>
-            {selection.paths.length > 1
-              ? `${selection.paths.length} objects draw this line. Drag it on the page to move them together, or right-click for everything else.`
-              : 'Drag it on the page to move it, or right-click it for everything else.'}
+            {selection.field
+              ? 'Drag it on the page to move it. Click it again, or press Enter, to change its value; right-click it for everything else.'
+              : selection.paths.length > 1
+                ? `${selection.paths.length} objects draw this line. Drag it on the page to move them together, or right-click for everything else.`
+                : 'Drag it on the page to move it, or right-click it for everything else.'}
           </p>
 
           {onDeleteSelection && (
@@ -181,7 +183,7 @@ export function PropertiesPanel({ onDeleteSelection }: PropertiesPanelProps) {
               }}
             >
               <IconTrash size={13} />
-              Delete from the document
+              {selection.field ? 'Delete this field' : 'Delete from the document'}
             </button>
           )}
         </>
