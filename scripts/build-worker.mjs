@@ -26,6 +26,15 @@ import { join } from 'node:path';
 const root = process.cwd();
 const outfile = join(root, 'public', 'engine-worker.js');
 
+/**
+ * This build's stamp. It is written to `engine-worker.meta.json` for the page
+ * to put in the worker's URL, and it is baked into the worker itself so the
+ * worker can put it in the WASM binary's URL. The offline service worker is
+ * built with the same value and treats a request stamped with any other build
+ * as belonging to a newer page, which it must not answer from its cache.
+ */
+const stamp = Date.now();
+
 /** @type {import('esbuild').BuildOptions} */
 const options = {
   entryPoints: [join(root, 'src', 'engine', 'worker.ts')],
@@ -41,7 +50,10 @@ const options = {
   // The WASM binary is fetched at runtime from /pdfium/, never imported, so
   // any stray reference to it from the vendor package must not be inlined.
   external: ['*.wasm'],
-  define: { 'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production') },
+  define: {
+    'process.env.NODE_ENV': JSON.stringify(process.env.NODE_ENV ?? 'production'),
+    'process.env.NEXT_PUBLIC_WORKER_STAMP': JSON.stringify(String(stamp)),
+  },
   // `@/` is used across the source tree and esbuild does not read tsconfig
   // paths unless pointed at it.
   tsconfig: join(root, 'tsconfig.json'),
@@ -63,7 +75,6 @@ if (watch) {
   const pkg = JSON.parse(
     await readFile(join(root, 'node_modules', '@embedpdf', 'pdfium', 'package.json'), 'utf8'),
   );
-  const stamp = Date.now();
 
   await writeFile(
     join(root, 'public', 'engine-worker.meta.json'),

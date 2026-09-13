@@ -3,6 +3,7 @@
 import * as Comlink from 'comlink';
 import { useEffect, useRef, useState } from 'react';
 import type { EngineApi } from '@/engine/worker';
+import { confirmEngineFresh, recoverFromStaleEngine } from '@/offline/register';
 
 /**
  * The worker client.
@@ -37,6 +38,42 @@ function getEngine(): Engine {
     // when behaviour and source appear to disagree.
     console.info(`Paperweight engine build ${stamp}`);
     sharedEngine = Comlink.wrap<EngineApi>(sharedWorker);
+
+    // That line says which build the page asked for. Only the worker can say
+    // which bytes answered, and the two disagree in exactly one situation: a
+    // cache — the browser's or the offline worker's — handed back a previous
+    // engine under a newer page. It looks precisely like a fix that does not
+    // work, so rather than only naming it, the page heals it: one guarded
+    // reload behind a fresh worker (see `recoverFromStaleEngine`). The check
+    // runs as the worker is created, before a document is open, so the reload
+    // costs the user nothing.
+    void sharedEngine
+      .build()
+      .then((running) => {
+        if (running === stamp) {
+          console.info(`Paperweight engine worker confirms build ${running}`);
+          confirmEngineFresh();
+        } else {
+          console.warn(
+            `Paperweight engine worker is build ${running} but the page expected ${stamp}: a cached engine is running. Reloading with a fresh engine.`,
+          );
+          void recoverFromStaleEngine(stamp);
+        }
+      })
+      .catch(() => {
+        // `build` did not answer. A current engine always has it, so the
+        // engine answering is one from before this method existed — which is
+        // exactly the stale build this whole check is here to catch. (A worker
+        // that failed to start at all is a different thing, reported by
+        // `useEngineHealth`; `recoverFromStaleEngine` only acts when a service
+        // worker is in control, so a genuine boot failure with no cache
+        // involved does no reload.)
+        console.warn(
+          `Paperweight engine worker does not report its build; the page expected ${stamp}. ` +
+            `A cached engine from before this check is running. Reloading with a fresh engine.`,
+        );
+        void recoverFromStaleEngine(stamp);
+      });
   }
   return sharedEngine;
 }

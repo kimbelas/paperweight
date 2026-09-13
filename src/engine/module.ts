@@ -18,7 +18,21 @@ export interface WasmSource {
   binary?: ArrayBuffer;
 }
 
-let wasmSource: WasmSource = { url: '/pdfium/pdfium.wasm' };
+/**
+ * The binary's URL carries the same build stamp as the worker's own URL.
+ *
+ * `build-worker.mjs` bakes the stamp in. It is there for the offline service
+ * worker, which answers engine requests from its cache and would otherwise
+ * hand a freshly deployed worker the previous build's binary on the first
+ * load after a deploy — a glue-and-binary mismatch the stamp on the worker
+ * URL alone cannot prevent. A worker built without a stamp (the tests build
+ * none) asks for the plain path.
+ */
+const WASM_URL = process.env.NEXT_PUBLIC_WORKER_STAMP
+  ? `/pdfium/pdfium.wasm?v=${process.env.NEXT_PUBLIC_WORKER_STAMP}`
+  : '/pdfium/pdfium.wasm';
+
+let wasmSource: WasmSource = { url: WASM_URL };
 
 /**
  * Point the loader at a different binary. Must be called before `getModule`.

@@ -63,6 +63,12 @@ declare const __RUNTIME_CACHE__: string;
 declare const __SHELL_FILES__: string[];
 /** Root-relative URLs of the engine, from the build output. */
 declare const __ENGINE_FILES__: string[];
+/**
+ * The engine build stamp this worker was built alongside: the `v` the page
+ * puts on the worker's URL and the worker puts on the binary's. Injected by
+ * the build from `engine-worker.meta.json`.
+ */
+declare const __ENGINE_STAMP__: string;
 
 const sw = self as unknown as ServiceWorkerGlobalScope;
 
@@ -224,8 +230,40 @@ async function navigate(request: Request): Promise<Response> {
  * is already keyed by the build, so matching on the path is correct — without
  * it, every deploy's new `?v=` would miss the precache it was just given.
  */
+/**
+ * Look a request up in this build's caches, and only those.
+ *
+ * `caches.match` searches every cache on the origin, which includes a
+ * previous build's engine cache for as long as it survives — and `activate`
+ * deleting it is not something to rely on, since a browser closed during
+ * activation leaves it behind with the worker already in charge. Under
+ * `ignoreSearch` that leftover answers `engine-worker.js?v=<new>` with the
+ * previous engine, every load, indefinitely. Naming the caches to search is
+ * what makes the stamp mean something.
+ */
+async function matchMine(request: Request): Promise<Response | undefined> {
+  for (const name of MINE) {
+    const hit = await (await caches.open(name)).match(request, { ignoreSearch: true });
+    if (hit) return hit;
+  }
+  return undefined;
+}
+
 async function asset(event: FetchEvent, url: URL): Promise<Response> {
-  const hit = await caches.match(event.request, { ignoreSearch: true });
+  // An engine request stamped with a build other than this worker's comes
+  // from a page newer than the worker: the first load after a deploy, while
+  // the replacement worker is still installing and this one still answers.
+  // Serving it from this cache would run the previous engine under the new
+  // page's shell, which is exactly the failure the stamp on the URL exists to
+  // rule out — and `ignoreSearch` below would do precisely that. So a foreign
+  // stamp goes straight to the network, and nothing is kept: this cache is
+  // about to be discarded by the worker that owns the new stamp.
+  if (ENGINE.has(url.pathname)) {
+    const requested = url.searchParams.get('v');
+    if (requested !== null && requested !== __ENGINE_STAMP__) return fetch(event.request);
+  }
+
+  const hit = await matchMine(event.request);
   if (hit) return hit;
 
   const response = await fetch(event.request);
