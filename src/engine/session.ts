@@ -1,5 +1,11 @@
 import type { WrappedPdfiumModule } from '@embedpdf/pdfium';
-import { certificationLevel, listAnnotations, removeAnnotations } from './annotations';
+import {
+  certificationLevel,
+  listAnnotations,
+  removeAnnotations,
+  removeAnnotationsUnder,
+  type HiddenRemoval,
+} from './annotations';
 import { PdfDocument } from './document';
 import { formFieldLabel, formFieldPhrase } from './form-label';
 import { History } from './history';
@@ -465,8 +471,15 @@ export class EditorSession {
   async apply(placements: Placement[]): Promise<CommitResult> {
     if (placements.length === 0) return { changedPages: [], badges: [] };
     return this.commit('Apply changes', async (doc) => {
+      // A cover or a line of added text is page content, and a viewer paints
+      // form fields and signatures on top of page content -- so an annotation
+      // left under the cover reappears in print and in the saved file, however
+      // clean the editor looks. Take out what the cover hides first, then draw
+      // it. Done before `applyPlacements` because that removal reloads the
+      // document, which would discard objects added ahead of it.
+      const removed = removeAnnotationsUnder(doc, placements);
       await applyPlacements(doc, placements);
-      return [];
+      return coveredBadges(removed);
     });
   }
 
@@ -724,4 +737,36 @@ function fieldWidth(field: FormFieldInfo): number {
 
 function allPages(doc: PdfDocument): number[] {
   return Array.from({ length: doc.pageCount }, (_, i) => i);
+}
+
+/**
+ * Disclose what a cover or added-text took out from under it.
+ *
+ * Removing the field or signature under a cover is the only way to stop it
+ * reappearing in print, but it is more than the user literally asked for, so
+ * it is said plainly rather than done silently -- the same principle as the
+ * font-substitution and signature-invalidation notices.
+ */
+function coveredBadges(removed: HiddenRemoval): Badge[] {
+  const parts: string[] = [];
+  if (removed.fields > 0) {
+    parts.push(removed.fields === 1 ? 'a form field' : `${removed.fields} form fields`);
+  }
+  if (removed.annotations > 0) {
+    parts.push(
+      removed.annotations === 1
+        ? 'a signature or annotation'
+        : `${removed.annotations} annotations`,
+    );
+  }
+  if (parts.length === 0) return [];
+
+  return [
+    {
+      kind: 'covered-removed',
+      message: `Removed ${parts.join(' and ')} beneath what you added, so the old ${
+        removed.annotations > 0 && removed.fields === 0 ? 'mark' : 'value'
+      } cannot reappear when this is printed or saved.`,
+    },
+  ];
 }

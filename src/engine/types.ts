@@ -31,7 +31,10 @@ export type BadgeKind =
   | 'text-overflows'
   | 'kerning-lost'
   | 'signature-invalidated'
-  | 'partial-removal';
+  | 'partial-removal'
+  // A cover or added text removed a form field or signature it was placed over,
+  // so the hidden value cannot be redrawn on top of it by a viewer.
+  | 'covered-removed';
 
 export interface Badge {
   kind: BadgeKind;
