@@ -136,6 +136,7 @@ the decisions. `docs/research/01-editing-engines.md` and
   the form, not the content stream, so there is nothing to regenerate, and
   calling `GenerateContent` would rewrite a page the user never edited.
   `commit` and `commitSync` take a `repaint` list for exactly this case.
+
 - **A widget is addressed by its object number, never by its name.** Every
   option of a radio group shares one name, and so does every widget of a
   field shown twice; looking fields up by name made the second radio option
@@ -156,7 +157,6 @@ the decisions. `docs/research/01-editing-engines.md` and
   is the only element with `touch-action: none`. A button inside an editor
   uses `pressHandlers`: it must not take focus from the input, and WebKit
   sends no click after a cancelled press, so it acts on release.
-
 
 - **A field clips to its own rectangle, so its width is part of the
   document.** A value wider than the box is cut off in the file — on screen
