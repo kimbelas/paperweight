@@ -26,6 +26,28 @@ export function ChoiceEditor({
   onCancel: () => void;
 }) {
   const ref = useRef<HTMLSelectElement | null>(null);
+  /** Set once the choice is committed or cancelled, so neither happens twice. */
+  const settled = useRef(false);
+  /**
+   * True while the keyboard is stepping through the options. On a closed
+   * select each arrow press is a `change`, and committing each one made
+   * every step its own edit and its own undo entry. A keyboard choice is
+   * committed on Enter, or when focus moves elsewhere, instead.
+   */
+  const stepping = useRef(false);
+
+  const commit = (value: string) => {
+    if (settled.current) return;
+    settled.current = true;
+    if (value === field.value) onCancel();
+    else void onCommit(value);
+  };
+
+  const cancel = () => {
+    if (settled.current) return;
+    settled.current = true;
+    onCancel();
+  };
 
   useLayoutEffect(() => {
     const select = ref.current as (HTMLSelectElement & { showPicker?: () => void }) | null;
@@ -59,16 +81,35 @@ export function ChoiceEditor({
         outline: '1.5px solid var(--app-accent)',
       }}
       defaultValue={field.value}
-      onChange={(event) => void onCommit(event.target.value)}
-      onBlur={onCancel}
+      // A finger or a mouse picking from the list chooses at once.
+      onPointerDown={() => (stepping.current = false)}
+      onChange={(event) => {
+        if (!stepping.current) commit(event.target.value);
+      }}
+      onBlur={(event) => {
+        // The platform picker can take focus from the window rather than from
+        // this element; that is the list opening, not the user leaving.
+        if (document.activeElement === event.currentTarget || !document.hasFocus()) return;
+        // Focus really went elsewhere: keep a choice the keyboard made.
+        if (stepping.current) commit(event.currentTarget.value);
+        else cancel();
+      }}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') onCancel();
+        if (event.key === 'Escape') cancel();
+        else if (event.key !== 'Enter' && event.key !== 'Tab') stepping.current = true;
+        event.stopPropagation();
+      }}
+      onKeyUp={(event) => {
+        // On release, so the option Enter picked from an open list is already
+        // the select's value.
+        if (event.key === 'Enter') commit(event.currentTarget.value);
         event.stopPropagation();
       }}
     >
       {!options.includes(field.value) && <option value={field.value}>{field.value}</option>}
-      {options.map((option) => (
-        <option key={option} value={option}>
+      {options.map((option, index) => (
+        // Labels can repeat; positions cannot.
+        <option key={index} value={option}>
           {option}
         </option>
       ))}

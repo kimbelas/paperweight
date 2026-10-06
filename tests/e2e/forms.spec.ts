@@ -632,3 +632,34 @@ test.describe('on a phone', () => {
     expect(sideways).toBe(0);
   });
 });
+
+test('arrow keys on a combo do not commit each step; Enter does', async ({ page }) => {
+  await openApp(page);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /choose a pdf/i }).click();
+  await (await chooser).setFiles(join(FIXTURES, 'form-kinds.pdf'));
+  await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Rendering…')).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByRole('button', { name: /edit text/i }).click();
+  await clickPdf(page, 280, 669);
+  const select = page.getByRole('combobox', { name: /choose/i });
+  await expect(select).toBeVisible({ timeout: 20_000 });
+
+  // Stepping through the options with the keyboard is looking, not choosing:
+  // each step used to be its own commit and its own undo entry.
+  await select.press('ArrowDown');
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  await expect(select).toBeVisible();
+
+  // Enter commits whatever the select holds. Firefox opens its list on focus
+  // and that list does not take synthetic arrow keys, so there the value
+  // never moved and Enter rightly closes without an edit.
+  const chosen = await select.inputValue();
+  await select.press('Enter');
+  await expect(select).toHaveCount(0);
+  const undo = page.getByRole('button', { name: 'Undo' });
+  if (chosen === 'Japan') await expect(undo).toBeDisabled();
+  else await expect(undo).toBeEnabled({ timeout: 20_000 });
+});
