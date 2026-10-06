@@ -46,6 +46,10 @@ const FormFlag = {
   NoExport: 1 << 2,
   /** Text spans lines, so a single-line redraw would not reproduce it. */
   Multiline: 1 << 12,
+  /** The value is masked as it is typed. */
+  Password: 1 << 13,
+  /** A combo box whose value can also be typed. */
+  Edit: 1 << 18,
   /**
    * One character per cell, spread across the box.
    *
@@ -55,6 +59,18 @@ const FormFlag = {
    */
   Comb: 1 << 24,
 } as const;
+
+/** `/F` annotation flags, PDF 32000 table 165. */
+const AnnotFlag = {
+  Hidden: 1 << 1,
+  NoView: 1 << 5,
+} as const;
+
+/** A widget that is not drawn on screen is not something a user can tap. */
+function isShown(doc: PdfDocument, annot: number): boolean {
+  const flags = doc.mod.FPDFAnnot_GetFlags(annot);
+  return (flags & (AnnotFlag.Hidden | AnnotFlag.NoView)) === 0;
+}
 
 /** Map PDFium's field type onto something the interface can say out loud. */
 function kindOf(type: number): FormFieldKind {
@@ -167,6 +183,8 @@ function describeField(
     toggleable: clickable && !readOnly && ref !== 0,
     textSize: drawnSize(doc, annot, ref, rect, siblings),
     clips: appearanceTrustworthyAt(doc, form, annot),
+    password: kind === 'text' && (flags & FormFlag.Password) !== 0,
+    maxLen: kind === 'text' ? readMaxLen(doc, annot) : undefined,
     notEditableReason: readOnly
       ? 'The form marks this field read-only, so its value is not meant to be changed here.'
       : ref === 0 && (typeable || clickable)
@@ -204,14 +222,13 @@ export function formFieldAt(
   });
   if (!annot) return null;
 
+  if (!isShown(doc, annot)) {
+    mod.FPDFPage_CloseAnnot(annot);
+    return null;
+  }
+
   try {
-    return describeField(
-      doc,
-      form,
-      annot,
-      pageIndex,
-      pageTypeSizes(doc, pageIndex),
-    );
+    return describeField(doc, form, annot, pageIndex, pageTypeSizes(doc, pageIndex));
   } finally {
     mod.FPDFPage_CloseAnnot(annot);
   }
@@ -232,6 +249,7 @@ export function listFormFields(doc: PdfDocument, pageIndex: number): FormFieldIn
     const annot = mod.FPDFPage_GetAnnot(page, i);
     if (!annot) continue;
     try {
+      if (!isShown(doc, annot)) continue;
       const field = describeField(doc, form, annot, pageIndex, siblings);
       // A non-widget annotation reports an unknown field type and no name.
       if (field.kind !== 'unknown' || field.name) fields.push(field);
@@ -541,8 +559,7 @@ function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
       if (mod.FPDFAnnot_GetFormFieldType(form, annot) < 0) continue;
       const original = doc.originalApSize(widgetRef(doc, annot));
       if (original !== null && original > 0) sizes.push(original);
-      const match = TF.exec(readAnnotString(doc, annot, 'DA'));
-      const size = match ? Number(match[2]) : 0;
+      const size = declaredSize(doc, annot);
       if (size > 0) sizes.push(size);
     } finally {
       mod.FPDFPage_CloseAnnot(annot);
@@ -558,10 +575,40 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
-/** The type size a widget's `/DA` declares, or 0 when it says "auto". */
+/**
+ * The type size a widget's `/DA` declares, or 0 when it says "auto".
+ *
+ * Read through `FPDFAnnot_GetFontSize`, which resolves `/DA` the way PDFium
+ * will when it draws: the widget, then its parent fields, then `/AcroForm`.
+ * Reading the widget's own dictionary found nothing for a size set on the
+ * parent, called that "auto", and converted a perfectly well-specified field
+ * into page text. An auto size still reads as 0 through this call.
+ */
 function declaredSize(doc: PdfDocument, annot: number): number {
+  const { mod } = doc;
+  const form = doc.form;
+  if (form) {
+    const size = withScope(mod, (scope) => {
+      const ptr = scope.allocFloat();
+      return mod.FPDFAnnot_GetFontSize(form, annot, ptr)
+        ? (mod.pdfium.getValue(ptr, 'float') as number)
+        : null;
+    });
+    if (size !== null) return size;
+  }
   const match = TF.exec(readAnnotString(doc, annot, 'DA'));
   return match ? Number(match[2]) : 0;
+}
+
+/** The widget's `/MaxLen`, when it has one. Not inherited from a parent. */
+function readMaxLen(doc: PdfDocument, annot: number): number | undefined {
+  const { mod } = doc;
+  return withScope(mod, (scope) => {
+    const ptr = scope.allocFloat();
+    if (!mod.FPDFAnnot_GetNumberValue(annot, 'MaxLen', ptr)) return undefined;
+    const value = mod.pdfium.getValue(ptr, 'float') as number;
+    return value > 0 ? Math.round(value) : undefined;
+  });
 }
 
 /**
@@ -655,7 +702,7 @@ function resolveTextSize(
   const da = readAnnotString(doc, annot, 'DA');
   const daTf = TF.exec(da);
 
-  if (daTf && Number(daTf[2]) > 0) return null;
+  if (declaredSize(doc, annot) > 0) return null;
 
   const ap = readAppearance(doc, annot);
   const apTf = TF.exec(ap);

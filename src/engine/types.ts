@@ -335,6 +335,10 @@ export interface FormFieldInfo {
    * the offer to widen the box means anything.
    */
   clips: boolean;
+  /** A password field: its value is masked and never drawn as page text. */
+  password: boolean;
+  /** The most characters the field accepts, when the form sets a limit. */
+  maxLen?: number;
   /** Why it cannot be changed, when it cannot. */
   notEditableReason?: string;
 }

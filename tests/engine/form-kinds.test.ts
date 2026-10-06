@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { fixtureBytes, loadEngine, withBytes, withFixture } from '../helpers';
-import { formFieldByName, listFormFields } from '@/engine/forms';
+import { formFieldAt, formFieldByName, listFormFields } from '@/engine/forms';
+import { getTextLines } from '@/engine/text';
 import { EditorSession } from '@/engine/session';
 
 /**
@@ -112,5 +113,73 @@ describe('appearance sizes', () => {
 
     expect(session.formFields(0).find((f) => f.name === 'Surname')!.textSize).toBe(9);
     session.close();
+  });
+});
+
+describe('field kinds', () => {
+  it('reads a size declared on the parent field', async () => {
+    const field = await withFixture('form-kinds.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Inherited')!,
+    );
+    expect(field.textSize).toBe(10);
+    expect(field.clips).toBe(true);
+  });
+
+  it('reads a size declared on the form', async () => {
+    const field = await withFixture('form-kinds.pdf', (doc) =>
+      formFieldByName(doc, 0, 'FormDefault')!,
+    );
+    expect(field.textSize).toBe(9);
+    expect(field.clips).toBe(true);
+  });
+
+  it('still treats an auto size as auto', async () => {
+    const field = await withFixture('autosize-field.pdf', (doc) =>
+      formFieldByName(doc, 0, 'Surname')!,
+    );
+    expect(field.clips).toBe(false);
+  });
+
+  it('keeps an edited inherited-size field a form field', async () => {
+    const session = await openSession();
+    const field = session.formFields(0).find((f) => f.name === 'Inherited')!;
+    await session.setFormFieldValue(0, field.ref, 'EDITED');
+    const saved = session.save();
+    session.close();
+
+    const after = await withBytes(saved, (doc) => formFieldByName(doc, 0, 'Inherited'));
+    expect(after?.value).toBe('EDITED');
+  });
+
+  it('does not list hidden or no-view widgets, or hit them', async () => {
+    await withFixture('form-kinds.pdf', (doc) => {
+      const names = listFormFields(doc, 0).map((f) => f.name);
+      expect(names).not.toContain('HiddenBox');
+      expect(names).not.toContain('NoViewBox');
+      expect(formFieldAt(doc, 0, 250, 567)).toBeNull();
+      expect(formFieldAt(doc, 0, 250, 537)).toBeNull();
+      // And the text under them is still reachable.
+      expect(getTextLines(doc, 0).some((l) => l.text.includes('UNDER HIDDEN'))).toBe(true);
+    });
+  });
+
+  it('reports a password field, and never draws its value as page text', async () => {
+    const session = await openSession();
+    const pin = session.formFields(0).find((f) => f.name === 'Pin')!;
+    expect(pin.password).toBe(true);
+
+    await session.setFormFieldValue(0, pin.ref, 'hunter2');
+    const saved = session.save();
+    session.close();
+
+    await withBytes(saved, (doc) => {
+      expect(formFieldByName(doc, 0, 'Pin')?.value).toBe('hunter2');
+      expect(getTextLines(doc, 0).some((l) => l.text.includes('hunter2'))).toBe(false);
+    });
+  });
+
+  it('reports the length limit', async () => {
+    const code = await withFixture('form-kinds.pdf', (doc) => formFieldByName(doc, 0, 'Code')!);
+    expect(code.maxLen).toBe(5);
   });
 });

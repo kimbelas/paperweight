@@ -279,7 +279,10 @@ export class EditorSession {
         // a field either -- see `FormFieldInfo.clips` -- so a width arriving
         // on this path would be a caller asking for something the outcome
         // makes meaningless, not a width being quietly lost.
-        if (!appearanceIsTrustworthy(doc, field)) {
+        //
+        // A password field stays a field whatever its size says: converting it
+        // would draw the secret into the page as readable text.
+        if (!field.password && !appearanceIsTrustworthy(doc, field)) {
           const conversion = await convertFieldToText(doc, field, value);
           return this.conversionBadges(field, conversion);
         }
