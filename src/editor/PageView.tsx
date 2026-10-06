@@ -29,6 +29,8 @@ import { toImageData } from './imageData';
 import { ChoiceEditor } from './ChoiceEditor';
 import { InlineTextEditor } from './InlineTextEditor';
 import { OverlayLayer } from './OverlayLayer';
+import { hitField, TOUCH_SLOP_PX } from './field-hit';
+import { useMediaQuery } from './media';
 import { trackPointer } from './pointer';
 import { fieldSelection, nextOverlayId, useEditor } from './store';
 import {
@@ -130,6 +132,31 @@ export function PageView({
   const [ocrTarget, setOcrTarget] = useState<OcrLine | null>(null);
   const [fieldTarget, setFieldTarget] = useState<FormFieldInfo | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
+  const [fields, setFields] = useState<FormFieldInfo[]>([]);
+  const coarse = useMediaQuery('(pointer: coarse)');
+
+  // The page's fields, refetched whenever the page changed. Tap hit-testing
+  // runs on this list; see `hitField` for why it does not ask the worker.
+  useEffect(() => {
+    let cancelled = false;
+    engine
+      .formFields(page.index)
+      .then((list) => {
+        if (!cancelled) setFields(list);
+      })
+      .catch(() => {
+        if (!cancelled) setFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, page.index, renderToken]);
+
+  const fieldAt = useCallback(
+    (x: number, y: number, slop = coarse ? TOUCH_SLOP_PX : 0) =>
+      transform ? hitField(fields, transform, x, y, slop) : null,
+    [fields, transform, coarse],
+  );
 
   const tool = useEditor((s) => s.tool);
   const editingLine = useEditor((s) => s.editingLine);
@@ -243,7 +270,7 @@ export function PageView({
    */
   const findEditable = useCallback(
     async (x: number, y: number): Promise<EditTarget | null> => {
-      const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
+      const field = fieldAt(x, y);
       if (field) return { kind: 'field', field };
 
       const line = await engine.lineAt(page.index, cssWidth, cssHeight, x, y);
@@ -254,7 +281,7 @@ export function PageView({
       const recognised = ocrLineAt(ocrLines, point.x, point.y);
       return recognised ? { kind: 'ocr', line: recognised } : null;
     },
-    [page.index, ocrLines, engine, cssWidth, cssHeight],
+    [fieldAt, page.index, ocrLines, engine, cssWidth, cssHeight],
   );
 
   /**
@@ -281,7 +308,7 @@ export function PageView({
    */
   const findAnything = useCallback(
     async (x: number, y: number): Promise<PageHit | null> => {
-      const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
+      const field = fieldAt(x, y, 0);
       if (field) return { kind: 'field', field };
 
       const [object, line, point] = await Promise.all([
@@ -307,7 +334,7 @@ export function PageView({
       const recognised = ocrLineAt(ocrLines, point.x, point.y);
       return recognised ? { kind: 'ocr', line: recognised } : null;
     },
-    [engine, page.index, cssWidth, cssHeight, ocrLines],
+    [fieldAt, engine, page.index, cssWidth, cssHeight, ocrLines],
   );
 
   /**
@@ -552,8 +579,7 @@ export function PageView({
           // asking the worker for the whole object list that often is a cost
           // the outline is not worth. A field is the one thing whose click
           // behaviour differs from the tool's, so it is the one worth marking.
-          const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
-          setHover(field ? field.rect : null);
+          setHover(fieldAt(x, y, 0)?.rect ?? null);
           return;
         }
         const found = await findEditable(x, y);
@@ -562,7 +588,7 @@ export function PageView({
         setHover(null);
       }
     },
-    [tool, editTarget, hover, localPoint, findEditable, engine, page.index, cssWidth, cssHeight],
+    [tool, editTarget, hover, localPoint, findEditable, fieldAt],
   );
 
   const handleClick = useCallback(
@@ -573,7 +599,8 @@ export function PageView({
       // edits the field at once; the Select tool selects it, and the outline
       // takes the next click. See `activateField` and `selectField`.
       if (tool === 'edit-text' || tool === 'select') {
-        const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
+        // Synchronous, so an editor opened here is focused inside the tap.
+        const field = fieldAt(x, y);
         if (field) {
           if (tool === 'select') selectField(field);
           else await activateField(field);
@@ -627,6 +654,7 @@ export function PageView({
     [
       tool,
       localPoint,
+      fieldAt,
       findEditable,
       activateField,
       selectField,

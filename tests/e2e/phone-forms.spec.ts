@@ -161,3 +161,12 @@ test('a drifting second tap opens the field instead of nudging it', async ({
   });
   await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
 });
+
+test('a tap just below a small field reaches the field, not its label', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+
+  // Surname's box is 656..674; at this zoom 3pt below it is a few pixels away.
+  await tapPdf(page, 300, 653);
+  await expect(outline(page)).toHaveAttribute('aria-label', /Surname/);
+});
