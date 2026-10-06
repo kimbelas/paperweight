@@ -156,7 +156,10 @@ the decisions. `docs/research/01-editing-engines.md` and
   which handles `pointercancel` and a 10px finger threshold, and the outline
   is the only element with `touch-action: none`. A button inside an editor
   uses `pressHandlers`: it must not take focus from the input, and WebKit
-  sends no click after a cancelled press, so it acts on release.
+  sends no click after a cancelled press, so it acts on release, and only on
+  the release of the pointer that pressed it: a drag-select in the input that
+  ends over the button is not a press. The Cover tool's canvas takes
+  `pinch-zoom`, never `none`, so a page can still be zoomed while it is armed.
 
 - **A field clips to its own rectangle, so its width is part of the
   document.** A value wider than the box is cut off in the file — on screen

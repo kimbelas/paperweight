@@ -202,3 +202,18 @@ test('nothing over the document swallows the pinch', async ({ page }) => {
 
   expect(claimed, 'touch-action on the page canvas or an ancestor of it').toEqual([]);
 });
+
+test('the Cover tool leaves the pinch to the browser', async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.addInitScript(() => {
+    delete (window as unknown as Record<string, unknown>).showOpenFilePicker;
+  });
+  await page.goto('/');
+  await waitForLanding(page);
+  await openFixture(page, 'multipage.pdf');
+
+  // One finger drags out the patch, so panning is taken; two still zoom.
+  await page.keyboard.press('c');
+  const canvas = page.locator('canvas[aria-label="Page 1"]');
+  await expect(canvas).toHaveCSS('touch-action', /pinch-zoom/);
+});

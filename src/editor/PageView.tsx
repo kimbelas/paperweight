@@ -1112,7 +1112,9 @@ export function PageView({
       <canvas
         ref={canvasRef}
         className="page-sheet block h-full w-full"
-        style={{ cursor, touchAction: tool === 'cover' ? 'none' : undefined }}
+        // Cover drags out a patch with one finger, so panning is taken; the
+        // pinch is never taken, or the page could not be zoomed while it is armed.
+        style={{ cursor, touchAction: tool === 'cover' ? 'pinch-zoom' : undefined }}
         onClick={handleClick}
         onPointerMove={handleMove}
         onPointerLeave={() => setHover(null)}
