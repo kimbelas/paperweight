@@ -229,6 +229,8 @@ export function InlineTextEditor({
 
   const chipRef = useRef<HTMLDivElement | null>(null);
   const chip = useOnScreen(chipRef, [value, busy, clipped, coarse, box.left, box.width]);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const row = useOnScreen(rowRef, [value, busy, clipped, chip.below, box.left, box.width]);
 
   /** The editor's own height: the line's, plus whatever larger type needs. */
   const height = box.height + grow + pad * 2;
@@ -399,14 +401,23 @@ export function InlineTextEditor({
         The cut-off warning and the length counter share one row on the side
         the chip is not on, so a chip flipped below the box never lands on
         either of them, and they never land on each other.
+
+        Sized to its own text rather than to the box: left to shrink to fit,
+        an absolute row is only as wide as the field, and on a phone the
+        warning became a narrow column five lines tall over the form. Shifted
+        back on screen the same way the chip is, since a field on the right
+        half of a phone otherwise pushes it off the edge.
       */}
       {((widenable && clipped && !busy) ||
         (maxLength !== undefined && maxLength - value.length <= 5)) && (
         <div
+          ref={rowRef}
           className="pointer-events-none absolute flex items-start gap-1.5 text-[11px]"
           style={{
             ...(chip.below ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
             left: 0,
+            width: 'max-content',
+            transform: row.dx ? `translateX(${row.dx}px)` : undefined,
             maxWidth: 'min(calc(100vw - 16px), 460px)',
           }}
         >

@@ -244,6 +244,19 @@ test('the editor chip stays on screen for a field on the right', async ({ page }
       () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
     ),
   ).toBe(0);
+
+  // The cut-off warning sits on the other side of the box, and has to stay on
+  // screen too.
+  await editor(page).fill('A VALUE FAR TOO LONG FOR THIS BOX');
+  const warning = page.getByText(/cut off when printed/i);
+  await expect(warning).toBeVisible();
+  const placed = await warning.evaluate((n) => {
+    const r = n.getBoundingClientRect();
+    return { spill: r.right - window.innerWidth, height: r.height };
+  });
+  expect(placed.spill).toBeLessThanOrEqual(0);
+  // And readable: it once shrank to the field's width, five lines tall.
+  expect(placed.height).toBeLessThan(40);
 });
 
 test('with no blur, as on iOS, the next field opens and the first commits', async ({ page }) => {
