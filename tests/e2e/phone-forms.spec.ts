@@ -326,3 +326,33 @@ test('an action closes the drawer', async ({ page }) => {
   await page.getByRole('button', { name: 'Rotate 90°' }).click();
   await expect(page.getByRole('button', { name: 'Close this panel' })).toHaveCount(0);
 });
+
+test('Add text is readable on a phone', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  await page.getByRole('button', { name: 'Actions rail' }).click();
+  await page.getByRole('button', { name: 'Add text', exact: true }).click();
+  await tapPdf(page, 100, 300);
+
+  const size = await page.evaluate(() =>
+    parseFloat(
+      getComputedStyle(document.querySelector('input[aria-label="Text to add to the page"]')!)
+        .fontSize,
+    ),
+  );
+  expect(size).toBeGreaterThanOrEqual(16);
+});
+
+test('only the newest notice shows on a phone', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'acroform-sig-field.pdf');
+  // Opening a file with a signature field raises the signature notice.
+  // Selecting the signature field (rect 72 150 300 220) and tapping it again
+  // raises a second: "This is a signature field...".
+  await tapPdf(page, 186, 185);
+  await tapPdf(page, 186, 185);
+
+  const cards = page.locator('[role="status"] > div');
+  await expect(cards).toHaveCount(1);
+  await expect(page.getByRole('button', { name: /\+\d+ more/ })).toBeVisible();
+});

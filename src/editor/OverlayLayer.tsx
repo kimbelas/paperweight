@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef } from 'react';
 import { MARKS, markPathData, markStrokeWidth } from '@/engine/marks';
 import type { Rect } from '@/engine/types';
+import { useMediaQuery } from './media';
 import { useEditor, type OverlayItem } from './store';
 import { cssRectToPdf, pdfRectToCss, translatePdfRect, type PageTransform } from './transform';
 
@@ -297,6 +298,7 @@ function OverlayTextInput({
   onChange: (text: string) => void;
 }) {
   const ref = useRef<HTMLInputElement | null>(null);
+  const coarse = useMediaQuery('(pointer: coarse)');
 
   useEffect(() => {
     // A freshly placed box should be ready to type into without a second
@@ -309,9 +311,15 @@ function OverlayTextInput({
   return (
     <input
       ref={ref}
-      className="text-edit-input absolute inset-0 w-full"
+      className={`text-edit-input absolute w-full ${coarse ? 'left-0 top-0' : 'inset-0'}`}
       style={{
-        fontSize: (item.fontSize ?? 12) * zoom,
+        // Floored on a touch screen, as the field editor is: at a phone's zoom
+        // 12pt type is seven pixels, and under 16px mobile Safari zooms the
+        // page when the input takes focus.
+        fontSize: coarse
+          ? Math.max((item.fontSize ?? 12) * zoom, 16)
+          : (item.fontSize ?? 12) * zoom,
+        minHeight: coarse ? 24 : undefined,
         fontFamily: '"Liberation Sans", Arial, sans-serif',
         color: `rgba(${colour.r}, ${colour.g}, ${colour.b}, ${colour.a / 255})`,
         lineHeight: 1.25,
