@@ -1180,7 +1180,7 @@ export function PageView({
 
       {editTarget?.kind === 'field' && transform && (
         <InlineTextEditor
-          key={`field:${editTarget.field.name}`}
+          key={`field:${editTarget.field.ref}`}
           text={editTarget.field.value}
           bounds={editTarget.field.rect}
           // The size the engine says the value is really drawn at, not a

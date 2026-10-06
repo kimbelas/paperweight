@@ -254,7 +254,7 @@ export default function Editor() {
     async (field: FormFieldInfo, value: string, width?: number) => {
       setBusy('Updating the form…');
       try {
-        await absorb(await engine.setFormFieldValue(field.page, field.name, value, width));
+        await absorb(await engine.setFormFieldValue(field.page, field.ref, value, width));
       } catch (error) {
         notify('error', describe(error, 'That form field could not be changed.'));
       } finally {
@@ -269,7 +269,7 @@ export default function Editor() {
     async (field: FormFieldInfo) => {
       setBusy('Updating the form…');
       try {
-        await absorb(await engine.toggleFormFieldValue(field.page, field.name));
+        await absorb(await engine.toggleFormFieldValue(field.page, field.ref));
       } catch (error) {
         notify('error', describe(error, 'That box could not be ticked.'));
       } finally {
@@ -349,7 +349,7 @@ export default function Editor() {
     async (field: FormFieldInfo) => {
       setBusy('Widening the field…');
       try {
-        await absorb(await engine.fitFormFieldWidth(field.page, field.name));
+        await absorb(await engine.fitFormFieldWidth(field.page, field.ref));
       } catch (error) {
         notify('error', describe(error, 'That field could not be widened.'));
       } finally {
@@ -360,30 +360,17 @@ export default function Editor() {
   );
 
   /**
-   * Remove a form field's widget from the page.
+   * Remove a form field's widget from the page and from the form's field tree.
    *
-   * The widget is an annotation, not a page object, so this goes through the
-   * annotation list rather than `removeObjects`. It is matched by rectangle
-   * rather than by name: a field's name frequently lives on a parent in the
-   * field tree rather than on the widget itself, so the widget's own `/T` is
-   * often absent, while its rectangle is exactly what the hit test used to
-   * decide the user had clicked this field.
+   * Addressed by the widget's object number, which survives undo and reloads,
+   * rather than by rectangle: a rectangle held in the selection goes stale the
+   * moment the field is moved and the move undone.
    */
   const deleteField = useCallback(
     async (field: FormFieldInfo) => {
       setBusy('Removing the field…');
       try {
-        const annotations = await engine.annotations(field.page);
-        const near = (a: number, b: number) => Math.abs(a - b) < 0.75;
-        const match = annotations.find(
-          (a) =>
-            near(a.bounds.left, field.rect.left) &&
-            near(a.bounds.bottom, field.rect.bottom) &&
-            near(a.bounds.right, field.rect.right) &&
-            near(a.bounds.top, field.rect.top),
-        );
-        if (!match) throw new Error('That field could not be found on the page any more.');
-        await absorb(await engine.removeAnnotationsAt(field.page, [match.index]));
+        await absorb(await engine.removeFormField(field.page, field.ref));
       } catch (error) {
         notify('error', describe(error, 'That field could not be removed.'));
       } finally {
@@ -392,8 +379,6 @@ export default function Editor() {
     },
     [engine, absorb, notify],
   );
-
-  // --- Pages ---------------------------------------------------------------
 
   /**
    * What the pages rail's right-click menu does.
@@ -496,14 +481,14 @@ export default function Editor() {
    * Unlike `moveSelection` this keeps the selection, re-read from the engine
    * so its rectangle is the moved one: a field is nudged into place over
    * several drags more often than in one, and `deleteField` finds the widget
-   * by its rectangle.
+   * by its object number.
    */
   const moveField = useCallback(
     async (field: FormFieldInfo, dx: number, dy: number) => {
       setBusy('Moving…');
       try {
-        await absorb(await engine.moveFormField(field.page, field.name, dx, dy));
-        const moved = (await engine.formFields(field.page)).find((f) => f.name === field.name);
+        await absorb(await engine.moveFormField(field.page, field.ref, dx, dy));
+        const moved = (await engine.formFields(field.page)).find((f) => f.ref === field.ref);
         setSelection(moved ? fieldSelection(moved) : null);
       } catch (error) {
         notify('error', describe(error, 'That field could not be moved.'));
@@ -556,24 +541,28 @@ export default function Editor() {
     try {
       const result = await engine.undo();
       if (result) await absorb(result);
+      // A selected field's rectangle and value describe the state being left.
+      if (store.getState().selection?.field) setSelection(null);
     } catch (error) {
       notify('error', describe(error, 'That could not be undone.'));
     } finally {
       setBusy(null);
     }
-  }, [engine, absorb, notify]);
+  }, [engine, absorb, notify, store, setSelection]);
 
   const redo = useCallback(async () => {
     setBusy('Redoing…');
     try {
       const result = await engine.redo();
       if (result) await absorb(result);
+      // A selected field's rectangle and value describe the state being left.
+      if (store.getState().selection?.field) setSelection(null);
     } catch (error) {
       notify('error', describe(error, 'That could not be redone.'));
     } finally {
       setBusy(null);
     }
-  }, [engine, absorb, notify]);
+  }, [engine, absorb, notify, store, setSelection]);
 
   // --- Output ------------------------------------------------------------
 
