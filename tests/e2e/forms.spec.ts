@@ -613,16 +613,15 @@ test.describe('on a phone', () => {
     expect(shown.heightPx).toBeGreaterThan(16);
     expect(shown.focused).toBe(true);
 
-    // Typing still reaches it, and the hint stays on the screen rather than
-    // running off the right-hand edge with half of it out of sight.
+    // Typing still reaches it, and the chip stays on the screen rather than
+    // running off the right-hand edge with half of it out of sight. On touch
+    // it carries Done and Cancel in place of the Enter hint.
     await input.fill('DOE-WHITFIELD');
     await expect(input).toHaveValue('DOE-WHITFIELD');
 
     const overhang = await page.evaluate(() => {
-      const hint = [...document.querySelectorAll('div')].find((d) =>
-        d.textContent?.startsWith('Enter to update'),
-      )!;
-      return hint.getBoundingClientRect().right - window.innerWidth;
+      const done = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Done')!;
+      return done.closest('div')!.getBoundingClientRect().right - window.innerWidth;
     });
     expect(overhang).toBeLessThanOrEqual(0);
 

@@ -1247,7 +1247,9 @@ export function PageView({
             onCancel={() => setFieldTarget(null)}
             onCommit={async (value, width) => {
               const field = editTarget.field;
-              setFieldTarget(null);
+              // Only if it is still this field: an editor replaced by a tap on
+              // another one commits as it unmounts, after the next is open.
+              setFieldTarget((t) => (t?.ref === field.ref ? null : t));
               await onCommitField(field, value, width);
             }}
           />
@@ -1282,13 +1284,15 @@ export function PageView({
             setOcrTarget(null);
           }}
           onCommit={async (value) => {
+            // Cleared only if still this line, as for a field above.
             if (editTarget.kind === 'ocr') {
               const line = editTarget.line;
-              setOcrTarget(null);
+              setOcrTarget((t) => (t === line ? null : t));
               await onCommitOcr(line, value);
             } else {
               const line = editTarget.line;
-              setEditingLine(null);
+              const open = useEditor.getState().editingLine;
+              if (open?.id === line.id && open.page === line.page) setEditingLine(null);
               await onCommitText(page.index, line.id, value);
             }
           }}

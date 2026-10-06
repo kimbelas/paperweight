@@ -170,3 +170,97 @@ test('a tap just below a small field reaches the field, not its label', async ({
   await tapPdf(page, 300, 653);
   await expect(outline(page)).toHaveAttribute('aria-label', /Surname/);
 });
+
+const editor = (page: Page) => page.getByRole('textbox', { name: /edit this line of text/i });
+
+test('Widen to fit widens the field on a phone', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  await tapPdf(page, 300, 665);
+  await tapPdf(page, 300, 665);
+  await expect(editor(page)).toBeVisible({ timeout: 20_000 });
+  await editor(page).fill('DOE-WHITFIELD Y HARTLEY OF ASHFORD');
+
+  const before = (await editor(page).boundingBox())!.width;
+  await page.getByRole('button', { name: 'Widen to fit' }).tap();
+  await expect.poll(async () => (await editor(page).boundingBox())!.width).toBeGreaterThan(before);
+  await expect(editor(page)).toBeVisible();
+});
+
+test('Done commits and Cancel discards', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+
+  await tapPdf(page, 300, 665);
+  await tapPdf(page, 300, 665);
+  await editor(page).fill('KEPT');
+  await page.getByRole('button', { name: 'Done' }).tap();
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+
+  await tapPdf(page, 300, 625);
+  await tapPdf(page, 300, 625);
+  await editor(page).fill('DISCARDED');
+  await page.getByRole('button', { name: 'Cancel' }).tap();
+  await expect(editor(page)).toHaveCount(0);
+
+  // Reopen GivenNames: still the original value.
+  await tapPdf(page, 300, 625);
+  await tapPdf(page, 300, 625);
+  await expect(editor(page)).toHaveValue('JANE ANNE ELIZABETH DOE');
+});
+
+test('commits the first field when another is tapped', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  // Edit text tool, so one tap opens a field.
+  await page.getByRole('button', { name: 'Actions rail' }).click();
+  await page.getByRole('button', { name: 'Edit text', exact: true }).click();
+
+  await tapPdf(page, 300, 665);
+  await editor(page).fill('FIRST');
+  await tapPdf(page, 300, 625);
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+
+  await page.keyboard.press('Escape');
+  await tapPdf(page, 300, 665);
+  await expect(editor(page)).toHaveValue('FIRST');
+});
+
+test('the editor chip stays on screen for a field on the right', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'form-kinds.pdf');
+  // Shared kid 2 sits at x 320..420 on a 612pt page: the right third.
+  await tapPdf(page, 370, 408);
+  await tapPdf(page, 370, 408);
+  await expect(editor(page)).toBeVisible({ timeout: 20_000 });
+
+  const overflow = await page.evaluate(() => {
+    const done = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Done')!;
+    return done.closest('div')!.getBoundingClientRect().right - window.innerWidth;
+  });
+  expect(overflow).toBeLessThanOrEqual(0);
+  expect(
+    await page.evaluate(
+      () => document.documentElement.scrollWidth - document.documentElement.clientWidth,
+    ),
+  ).toBe(0);
+});
+
+test('with no blur, as on iOS, the next field opens and the first commits', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  await page.getByRole('button', { name: 'Actions rail' }).click();
+  await page.getByRole('button', { name: 'Edit text', exact: true }).click();
+
+  await tapPdf(page, 300, 665);
+  await editor(page).fill('FIRST');
+  // iOS sends no blur when the tap lands on something that cannot take
+  // focus, so the editor is replaced without ever losing focus.
+  await page.evaluate(() => {
+    for (const type of ['focusout', 'blur'])
+      window.addEventListener(type, (event) => event.stopImmediatePropagation(), true);
+  });
+  await tapPdf(page, 300, 625);
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+  await expect(editor(page)).toHaveValue('JANE ANNE ELIZABETH DOE');
+});
