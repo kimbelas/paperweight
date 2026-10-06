@@ -85,6 +85,10 @@ interface InlineTextEditorProps {
   widenable?: boolean;
   /** Widest the box may become, in points. Stops it running off the page. */
   maxWidth?: number;
+  /** Mask the value as it is typed. */
+  password?: boolean;
+  /** The most characters the field accepts. */
+  maxLength?: number;
   /** The committed width, in points, when it was changed. */
   onCommit: (text: string, width?: number) => void | Promise<void>;
   onCancel: () => void;
@@ -104,6 +108,8 @@ export function InlineTextEditor({
   zoom,
   widenable,
   maxWidth,
+  password,
+  maxLength,
   onCommit,
   onCancel,
 }: InlineTextEditorProps) {
@@ -253,6 +259,8 @@ export function InlineTextEditor({
           lineHeight: `${height}px`,
           opacity: busy ? 0.5 : 1,
         }}
+        type={password ? 'password' : 'text'}
+        maxLength={maxLength}
         value={value}
         disabled={busy}
         spellCheck={false}
@@ -310,6 +318,21 @@ export function InlineTextEditor({
           </button>
         )}
       </div>
+
+      {maxLength !== undefined && maxLength - value.length <= 5 && (
+        <div
+          className="pointer-events-none absolute rounded px-1.5 py-0.5 text-[11px]"
+          style={{
+            top: '100%',
+            right: 0,
+            marginTop: 4,
+            background: 'var(--app-panel)',
+            color: 'var(--app-text-dim)',
+          }}
+        >
+          {value.length}/{maxLength}
+        </div>
+      )}
 
       {widenable && clipped && !busy && (
         <div

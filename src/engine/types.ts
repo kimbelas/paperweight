@@ -339,6 +339,10 @@ export interface FormFieldInfo {
   password: boolean;
   /** The most characters the field accepts, when the form sets a limit. */
   maxLen?: number;
+  /** A combo box's options, in order. */
+  options?: string[];
+  /** A combo box that also accepts a typed value. */
+  editableChoice: boolean;
   /** Why it cannot be changed, when it cannot. */
   notEditableReason?: string;
 }

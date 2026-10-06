@@ -26,6 +26,7 @@ import {
   IconWiden,
 } from './Icons';
 import { toImageData } from './imageData';
+import { ChoiceEditor } from './ChoiceEditor';
 import { InlineTextEditor } from './InlineTextEditor';
 import { OverlayLayer } from './OverlayLayer';
 import { fieldSelection, nextOverlayId, useEditor } from './store';
@@ -1178,36 +1179,57 @@ export function PageView({
 
       {transform && <OverlayLayer items={pageOverlay} transform={transform} zoom={zoom} />}
 
-      {editTarget?.kind === 'field' && transform && (
-        <InlineTextEditor
-          key={`field:${editTarget.field.ref}`}
-          text={editTarget.field.value}
-          bounds={editTarget.field.rect}
-          // The size the engine says the value is really drawn at, not a
-          // guess from the widget's height. The two are unrelated: a 24pt-tall
-          // box on a form set in 9pt is ordinary, and guessing from the box
-          // showed such a value at 14pt — it swelled the moment it was
-          // clicked, and "Widen to fit" then sized the box to that fiction.
-          fontSize={editTarget.field.textSize}
-          colour={{ r: 0, g: 0, b: 0, a: 255 }}
-          hint={`Enter to update ${formFieldPhrase(editTarget.field)} · Esc to cancel`}
-          // A field's width is part of the document, but only while it stays a
-          // field: it clips its own appearance, so a value wider than the box
-          // is cut off in the file. A field the engine will draw into the page
-          // instead does not clip, so there is nothing to widen and nothing to
-          // warn about.
-          widenable={editTarget.field.editable && editTarget.field.clips}
-          maxWidth={page.width - 6 - editTarget.field.rect.left}
-          transform={transform}
-          zoom={zoom}
-          onCancel={() => setFieldTarget(null)}
-          onCommit={async (value, width) => {
-            const field = editTarget.field;
-            setFieldTarget(null);
-            await onCommitField(field, value, width);
-          }}
-        />
-      )}
+      {editTarget?.kind === 'field' &&
+        transform &&
+        editTarget.field.kind === 'choice' &&
+        !editTarget.field.editableChoice && (
+          <ChoiceEditor
+            key={`choice:${editTarget.field.ref}`}
+            field={editTarget.field}
+            transform={transform}
+            onCancel={() => setFieldTarget(null)}
+            onCommit={async (value) => {
+              const field = editTarget.field;
+              setFieldTarget(null);
+              if (value !== field.value) await onCommitField(field, value);
+            }}
+          />
+        )}
+
+      {editTarget?.kind === 'field' &&
+        transform &&
+        !(editTarget.field.kind === 'choice' && !editTarget.field.editableChoice) && (
+          <InlineTextEditor
+            key={`field:${editTarget.field.ref}`}
+            text={editTarget.field.value}
+            bounds={editTarget.field.rect}
+            // The size the engine says the value is really drawn at, not a
+            // guess from the widget's height. The two are unrelated: a 24pt-tall
+            // box on a form set in 9pt is ordinary, and guessing from the box
+            // showed such a value at 14pt — it swelled the moment it was
+            // clicked, and "Widen to fit" then sized the box to that fiction.
+            fontSize={editTarget.field.textSize}
+            colour={{ r: 0, g: 0, b: 0, a: 255 }}
+            hint={`Enter to update ${formFieldPhrase(editTarget.field)} · Esc to cancel`}
+            // A field's width is part of the document, but only while it stays a
+            // field: it clips its own appearance, so a value wider than the box
+            // is cut off in the file. A field the engine will draw into the page
+            // instead does not clip, so there is nothing to widen and nothing to
+            // warn about.
+            widenable={editTarget.field.editable && editTarget.field.clips}
+            maxWidth={page.width - 6 - editTarget.field.rect.left}
+            password={editTarget.field.password}
+            maxLength={editTarget.field.maxLen}
+            transform={transform}
+            zoom={zoom}
+            onCancel={() => setFieldTarget(null)}
+            onCommit={async (value, width) => {
+              const field = editTarget.field;
+              setFieldTarget(null);
+              await onCommitField(field, value, width);
+            }}
+          />
+        )}
 
       {editTarget && editTarget.kind !== 'field' && transform && (
         <InlineTextEditor

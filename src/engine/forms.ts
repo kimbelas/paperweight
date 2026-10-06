@@ -39,6 +39,9 @@ const PAGE_MARGIN = 6;
  */
 const FIELD_INSET = 2;
 
+/** The virtual key code for Enter, as `FORM_OnKeyDown` takes it. */
+const KEY_ENTER = 0x0d;
+
 /** `FPDF_FORMFLAG_*` — fpdf_annot.h, plus the text-field bits from the spec. */
 const FormFlag = {
   ReadOnly: 1 << 0,
@@ -140,6 +143,19 @@ function widgetRef(doc: PdfDocument, annot: number): number {
  * `siblings` is shared across a whole listing so the page is
  * walked once rather than once per field. See `pageTypeSizes`.
  */
+/** A choice field's option labels, in order. */
+function readOptions(doc: PdfDocument, form: number, annot: number): string[] {
+  const { mod } = doc;
+  const count = mod.FPDFAnnot_GetOptionCount(form, annot);
+  const options: string[] = [];
+  for (let i = 0; i < count; i++) {
+    options.push(
+      readFormString(doc, annot, (b, n) => mod.FPDFAnnot_GetOptionLabel(form, annot, i, b, n)),
+    );
+  }
+  return options;
+}
+
 function describeField(
   doc: PdfDocument,
   form: number,
@@ -185,6 +201,8 @@ function describeField(
     clips: appearanceTrustworthyAt(doc, form, annot),
     password: kind === 'text' && (flags & FormFlag.Password) !== 0,
     maxLen: kind === 'text' ? readMaxLen(doc, annot) : undefined,
+    options: kind === 'choice' ? readOptions(doc, form, annot) : undefined,
+    editableChoice: kind === 'choice' && (flags & FormFlag.Edit) !== 0,
     notEditableReason: readOnly
       ? 'The form marks this field read-only, so its value is not meant to be changed here.'
       : ref === 0 && (typeable || clickable)
@@ -899,6 +917,14 @@ export function setFormFieldText(doc: PdfDocument, field: FormFieldInfo, text: s
   mod.FORM_OnLButtonDown(form, page, 0, x, y);
   mod.FORM_OnLButtonUp(form, page, 0, x, y);
 
+  // A click on a combo box opens its drop-down, and while that is open the
+  // edit box ignores a replacement: it reports success and keeps the old
+  // value. Enter closes the list and leaves the edit box focused.
+  if (field.kind === 'choice') {
+    mod.FORM_OnKeyDown(form, page, KEY_ENTER, 0);
+    mod.FORM_OnKeyUp(form, page, KEY_ENTER, 0);
+  }
+
   if (!mod.FORM_SelectAllText(form, page)) {
     mod.FORM_ForceToKillFocus(form);
     throw new Error('That field could not be focused for editing.');
@@ -910,6 +936,36 @@ export function setFormFieldText(doc: PdfDocument, field: FormFieldInfo, text: s
 
   // Committing is what writes the value back and regenerates the appearance.
   mod.FORM_ForceToKillFocus(form);
+}
+
+/**
+ * Choose one of a combo box's options.
+ *
+ * Through `FORM_SetIndexSelected` on the focused field, committed by killing
+ * focus, so PDFium writes `/V` and rebuilds the appearance together. Typing
+ * into a fixed combo did nothing at all: the replace call has no edit box to
+ * act on, returned without error, and the value stayed as it was. An
+ * editable combo also takes free text, through the ordinary text path.
+ */
+export function setFormFieldChoice(doc: PdfDocument, field: FormFieldInfo, value: string): void {
+  const { mod } = doc;
+  const form = doc.form;
+  if (!form) throw new Error('This document has no interactive form.');
+  if (field.readOnly) throw new Error(field.notEditableReason ?? 'This field is read-only.');
+
+  const index = (field.options ?? []).indexOf(value);
+  if (index < 0) {
+    if (field.editableChoice) return setFormFieldText(doc, field, value);
+    throw new Error(`"${value}" is not one of the choices this field offers.`);
+  }
+
+  const page = doc.page(field.page);
+  const { x, y } = centreOf(field);
+  mod.FORM_OnLButtonDown(form, page, 0, x, y);
+  mod.FORM_OnLButtonUp(form, page, 0, x, y);
+  const chosen = mod.FORM_SetIndexSelected(form, page, index, true);
+  mod.FORM_ForceToKillFocus(form);
+  if (!chosen) throw new Error('That choice could not be selected.');
 }
 
 /**

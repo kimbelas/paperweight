@@ -183,3 +183,47 @@ describe('field kinds', () => {
     expect(code.maxLen).toBe(5);
   });
 });
+
+describe('combo boxes', () => {
+  it('lists the options and says whether typing is allowed', async () => {
+    await withFixture('form-kinds.pdf', (doc) => {
+      const country = formFieldByName(doc, 0, 'Country')!;
+      expect(country.options).toEqual(['Philippines', 'Japan', 'Canada']);
+      expect(country.editableChoice).toBe(false);
+      expect(formFieldByName(doc, 0, 'City')!.editableChoice).toBe(true);
+    });
+  });
+
+  it('chooses an option, and the choice is in the saved file', async () => {
+    const session = await openSession();
+    const country = session.formFields(0).find((f) => f.name === 'Country')!;
+    await session.setFormFieldValue(0, country.ref, 'Canada');
+    const saved = session.save();
+    session.close();
+    expect(await withBytes(saved, (doc) => formFieldByName(doc, 0, 'Country')?.value)).toBe(
+      'Canada',
+    );
+  });
+
+  it('accepts typed text in an editable combo', async () => {
+    const session = await openSession();
+    const city = session.formFields(0).find((f) => f.name === 'City')!;
+    await session.setFormFieldValue(0, city.ref, 'Cebu');
+    const saved = session.save();
+    session.close();
+    expect(await withBytes(saved, (doc) => formFieldByName(doc, 0, 'City')?.value)).toBe('Cebu');
+  });
+
+  it('refuses a value a fixed combo does not offer', async () => {
+    const session = await openSession();
+    const country = session.formFields(0).find((f) => f.name === 'Country')!;
+    await expect(session.setFormFieldValue(0, country.ref, 'Narnia')).rejects.toThrow(
+      /not one of the choices/i,
+    );
+    const saved = session.save();
+    session.close();
+    expect(await withBytes(saved, (doc) => formFieldByName(doc, 0, 'Country')?.value)).toBe(
+      'Japan',
+    );
+  });
+});

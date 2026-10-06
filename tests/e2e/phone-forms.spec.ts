@@ -100,3 +100,17 @@ test('undo clears a field selection', async ({ page }) => {
   await page.getByRole('button', { name: 'Undo' }).click();
   await expect(outline(page)).toHaveCount(0);
 });
+
+test('a fixed combo opens a list of its options and saves the choice', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'form-kinds.pdf');
+
+  await tapPdf(page, 280, 669);
+  await tapPdf(page, 280, 669);
+  const select = page.getByRole('combobox', { name: /choose/i });
+  await expect(select).toBeVisible({ timeout: 20_000 });
+  await select.selectOption('Canada');
+
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+  await expect(select).toHaveCount(0);
+});

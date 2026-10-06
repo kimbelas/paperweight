@@ -11,6 +11,7 @@ import {
   listFormFields,
   measureFieldFit,
   moveFormField,
+  setFormFieldChoice,
   setFormFieldText,
   setFormFieldWidth,
   toggleFormField,
@@ -267,6 +268,12 @@ export class EditorSession {
       'Edit form field',
       async (doc) => {
         const field = this.findField(doc, pageIndex, ref);
+
+        // A combo box is chosen, not typed into, and never drawn as page text.
+        if (field.kind === 'choice') {
+          setFormFieldChoice(doc, field, value);
+          return [];
+        }
 
         // When the document does not say how the field should look, PDFium's
         // rebuilt appearance will not match it -- an auto size resolved to the
