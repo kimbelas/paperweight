@@ -284,3 +284,25 @@ test('the Enter that confirms an IME composition does not commit', async ({ page
   await expect(editor(page)).toHaveValue('DOE-SAN');
   await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
 });
+
+test('a selected field offers Edit and Delete on a phone, on screen', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'form-kinds.pdf');
+  await tapPdf(page, 370, 408);
+  await expect(outline(page)).toBeVisible();
+
+  await expect(page.getByText('Tap again to edit')).toBeVisible();
+  await expect(page.getByText(/Click again|Delete to remove/)).toHaveCount(0);
+
+  const overflow = await page.evaluate(() => {
+    const chip = [...document.querySelectorAll('span,div')].find((n) =>
+      n.textContent?.startsWith('Tap again to edit'),
+    )!;
+    return chip.getBoundingClientRect().right - window.innerWidth;
+  });
+  expect(overflow).toBeLessThanOrEqual(0);
+
+  await page.getByRole('button', { name: 'Delete', exact: true }).tap();
+  await expect(outline(page)).toHaveCount(0);
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+});

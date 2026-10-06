@@ -31,7 +31,9 @@ import { InlineTextEditor } from './InlineTextEditor';
 import { OverlayLayer } from './OverlayLayer';
 import { hitField, TOUCH_SLOP_PX } from './field-hit';
 import { useMediaQuery } from './media';
+import { useOnScreen } from './onscreen';
 import { trackPointer } from './pointer';
+import { pressHandlers } from './press';
 import { fieldSelection, nextOverlayId, useEditor } from './store';
 import {
   cssDeltaToPdf,
@@ -1174,7 +1176,21 @@ export function PageView({
           paths={selection.paths}
           rect={selectedField?.rect}
           label={selection.label}
-          hint={selectedField ? 'Drag to move · Click again to edit · Delete to remove' : undefined}
+          touch={coarse}
+          hint={
+            selectedField
+              ? coarse
+                ? 'Tap again to edit'
+                : 'Drag to move · Click again to edit · Delete to remove'
+              : coarse
+                ? 'Drag to move'
+                : undefined
+          }
+          onDelete={
+            selectedField
+              ? () => void onDeleteField(selectedField).then(() => setSelection(null))
+              : undefined
+          }
           renderToken={renderToken}
           onMove={(dx, dy) =>
             selectedField
@@ -1335,6 +1351,8 @@ function SelectionOutline({
   renderToken,
   onMove,
   onActivate,
+  onDelete,
+  touch,
 }: {
   engine: Engine;
   transform: PageTransform;
@@ -1352,7 +1370,12 @@ function SelectionOutline({
   onMove: (dx: number, dy: number) => void | Promise<void>;
   /** A press on the outline that did not travel far enough to be a drag. */
   onActivate?: () => void;
+  /** Removes the selected field; offered as a button on touch, where there is no Delete key. */
+  onDelete?: () => void;
+  /** A coarse pointer: the chip carries buttons instead of naming keys. */
+  touch?: boolean;
 }) {
+  const chipRef = useRef<HTMLDivElement | null>(null);
   const [found, setFound] = useState<Rect | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const key = paths.map((p) => p.join('.')).join('|');
@@ -1377,6 +1400,7 @@ function SelectionOutline({
   }, [engine, page, key, renderToken, fixed]);
 
   const rect = fixed ?? found;
+  const chip = useOnScreen(chipRef, [rect, drag === null, hint, touch]);
 
   const startDrag = useCallback(
     (event: React.PointerEvent) => {
@@ -1430,12 +1454,42 @@ function SelectionOutline({
       role="group"
       aria-label={`Selected: ${label}. Drag to move.`}
     >
-      <span
-        className="pointer-events-none absolute whitespace-nowrap rounded px-1.5 py-0.5 text-[11px]"
-        style={{ top: -21, left: 0, background: 'var(--app-selection)', color: '#fff' }}
+      <div
+        ref={chipRef}
+        className="absolute flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]"
+        style={{
+          ...(chip.below ? { top: '100%', marginTop: 4 } : { bottom: '100%', marginBottom: 4 }),
+          left: 0,
+          transform: chip.dx ? `translateX(${chip.dx}px)` : undefined,
+          maxWidth: 'min(calc(100vw - 16px), 460px)',
+          background: 'var(--app-selection)',
+          color: '#fff',
+        }}
       >
-        {drag ? 'Release to place' : (hint ?? 'Drag to move · Delete to remove')}
-      </span>
+        <span className="pointer-events-none">
+          {drag ? 'Release to place' : (hint ?? 'Drag to move · Delete to remove')}
+        </span>
+        {touch && !drag && onActivate && (
+          <button
+            type="button"
+            {...pressHandlers(onActivate)}
+            className="rounded px-3 font-semibold"
+            style={{ background: '#fff', color: 'var(--app-selection)', minHeight: 44 }}
+          >
+            Edit
+          </button>
+        )}
+        {touch && !drag && onDelete && (
+          <button
+            type="button"
+            {...pressHandlers(onDelete)}
+            className="rounded px-3"
+            style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', minHeight: 44 }}
+          >
+            Delete
+          </button>
+        )}
+      </div>
     </div>
   );
 }
