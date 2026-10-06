@@ -306,3 +306,23 @@ test('a selected field offers Edit and Delete on a phone, on screen', async ({ p
   await expect(outline(page)).toHaveCount(0);
   await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
 });
+
+test('picking the tool already active closes the drawer', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  await page.getByRole('button', { name: 'Actions rail' }).click();
+  await page.getByRole('button', { name: 'Select', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Close this panel' })).toHaveCount(0);
+
+  // And the next tap lands on the page, selecting the field.
+  await tapPdf(page, 300, 665);
+  await expect(outline(page)).toBeVisible();
+});
+
+test('an action closes the drawer', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  await page.getByRole('button', { name: 'Actions rail' }).click();
+  await page.getByRole('button', { name: 'Rotate 90°' }).click();
+  await expect(page.getByRole('button', { name: 'Close this panel' })).toHaveCount(0);
+});

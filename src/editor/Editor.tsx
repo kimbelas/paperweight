@@ -1138,6 +1138,7 @@ export default function Editor() {
                   onAddImage={() => void addImage()}
                   onRotate={() => pageActions.rotate(currentPage)}
                   onDeleteSelection={selection ? () => void deleteSelection() : undefined}
+                  onPicked={() => setDrawer(null)}
                 />
               ) : (
                 thumbRail

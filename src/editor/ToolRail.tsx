@@ -106,6 +106,8 @@ interface ToolRailProps {
   onAddImage: () => void;
   onRotate: () => void;
   onDeleteSelection?: () => void;
+  /** Called after something is chosen, so a drawer can close itself. */
+  onPicked?: () => void;
 }
 
 export function ToolRail({
@@ -122,6 +124,7 @@ export function ToolRail({
   onAddImage,
   onRotate,
   onDeleteSelection,
+  onPicked,
 }: ToolRailProps) {
   const tool = useEditor((s) => s.tool);
   const setTool = useEditor((s) => s.setTool);
@@ -155,7 +158,10 @@ export function ToolRail({
             label={label}
             title={`${label} (${key}) — ${hint}`}
             active={tool === id}
-            onClick={() => setTool(id)}
+            onClick={() => {
+              setTool(id);
+              onPicked?.();
+            }}
           >
             <Icon size={19} />
           </RailIcon>
@@ -166,14 +172,31 @@ export function ToolRail({
         <RailIcon
           label="Signature"
           title="Draw, type or upload a signature and place it on the page (S)"
-          onClick={onAddSignature}
+          onClick={() => {
+            onAddSignature();
+            onPicked?.();
+          }}
         >
           <IconSignature size={19} />
         </RailIcon>
-        <RailIcon label="Image" title="Place an image on the page (I)" onClick={onAddImage}>
+        <RailIcon
+          label="Image"
+          title="Place an image on the page (I)"
+          onClick={() => {
+            onAddImage();
+            onPicked?.();
+          }}
+        >
           <IconImage size={19} />
         </RailIcon>
-        <RailIcon label="Rotate page" title="Rotate this page 90° clockwise" onClick={onRotate}>
+        <RailIcon
+          label="Rotate page"
+          title="Rotate this page 90° clockwise"
+          onClick={() => {
+            onRotate();
+            onPicked?.();
+          }}
+        >
           <IconRotate size={19} />
         </RailIcon>
 
@@ -210,7 +233,10 @@ export function ToolRail({
               label={label}
               title={`${label} (${key}) — ${hint}`}
               active={tool === id}
-              onClick={() => setTool(id)}
+              onClick={() => {
+                setTool(id);
+                onPicked?.();
+              }}
             >
               <Icon size={20} />
             </ToolCard>
@@ -253,12 +279,22 @@ export function ToolRail({
           <ToolCard
             label="Signature"
             title="Draw, type or upload a signature and place it on the page (S)"
-            onClick={onAddSignature}
+            onClick={() => {
+              onAddSignature();
+              onPicked?.();
+            }}
           >
             <IconSignature size={20} />
           </ToolCard>
 
-          <ToolCard label="Image" title="Place an image on the page (I)" onClick={onAddImage}>
+          <ToolCard
+            label="Image"
+            title="Place an image on the page (I)"
+            onClick={() => {
+              onAddImage();
+              onPicked?.();
+            }}
+          >
             <IconImage size={20} />
           </ToolCard>
         </div>
@@ -268,7 +304,10 @@ export function ToolRail({
         <Heading>This page</Heading>
         <button
           type="button"
-          onClick={onRotate}
+          onClick={() => {
+            onRotate();
+            onPicked?.();
+          }}
           className="focus-ring btn-quiet flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-xs font-medium"
           style={{
             border: '1px solid var(--app-border)',
