@@ -264,3 +264,23 @@ test('with no blur, as on iOS, the next field opens and the first commits', asyn
   await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
   await expect(editor(page)).toHaveValue('JANE ANNE ELIZABETH DOE');
 });
+
+test('the Enter that confirms an IME composition does not commit', async ({ page }) => {
+  await openApp(page);
+  await openFixture(page, 'filled-form.pdf');
+  await tapPdf(page, 300, 665);
+  await tapPdf(page, 300, 665);
+  await expect(editor(page)).toBeVisible({ timeout: 20_000 });
+  await editor(page).fill('DOE-SAN');
+
+  // WebKit ends the composition before this keydown, so `isComposing` is
+  // false and only keyCode 229 marks it.
+  await editor(page).evaluate((input) =>
+    input.dispatchEvent(
+      new KeyboardEvent('keydown', { key: 'Enter', keyCode: 229, bubbles: true }),
+    ),
+  );
+  await page.waitForTimeout(500);
+  await expect(editor(page)).toHaveValue('DOE-SAN');
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+});

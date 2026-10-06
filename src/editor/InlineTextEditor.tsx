@@ -300,7 +300,14 @@ export function InlineTextEditor({
         aria-label="Edit this line of text"
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter' && !event.nativeEvent.isComposing) {
+          // The Enter that confirms an IME composition must not commit. Most
+          // engines flag it with `isComposing`; WebKit ends the composition
+          // before this keydown, so there it is only `keyCode` 229 that says so.
+          if (
+            event.key === 'Enter' &&
+            !event.nativeEvent.isComposing &&
+            event.nativeEvent.keyCode !== 229
+          ) {
             event.preventDefault();
             void submit();
           } else if (event.key === 'Escape') {
