@@ -294,6 +294,14 @@ export type FormFieldKind =
  */
 export interface FormFieldInfo {
   page: number;
+  /**
+   * The widget's PDF object number, which is how a field is addressed.
+   *
+   * Not the name: every option of a radio group shares one, as does every
+   * widget of a field shown in two places, so a lookup by name always found
+   * the first. Object numbers survive the engine's own save and reload.
+   */
+  ref: number;
   /** The field's name in the form, e.g. `Surname`. */
   name: string;
   kind: FormFieldKind;

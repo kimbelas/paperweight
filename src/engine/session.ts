@@ -7,13 +7,14 @@ import {
   appearanceIsTrustworthy,
   convertFieldToText,
   formFieldAt,
-  formFieldByName,
+  formFieldByRef,
   listFormFields,
   measureFieldFit,
   moveFormField,
   setFormFieldText,
   setFormFieldWidth,
   toggleFormField,
+  withAnnotIndexOf,
 } from './forms';
 import {
   applyPlacements,
@@ -258,14 +259,14 @@ export class EditorSession {
    */
   async setFormFieldValue(
     pageIndex: number,
-    name: string,
+    ref: number,
     value: string,
     width?: number,
   ): Promise<CommitResult> {
     return this.commit(
       'Edit form field',
       async (doc) => {
-        const field = this.findField(doc, pageIndex, name);
+        const field = this.findField(doc, pageIndex, ref);
 
         // When the document does not say how the field should look, PDFium's
         // rebuilt appearance will not match it -- an auto size resolved to the
@@ -289,10 +290,10 @@ export class EditorSession {
           setFormFieldWidth(doc, field, width);
         }
 
-        const resized = this.findField(doc, pageIndex, name);
+        const resized = this.findField(doc, pageIndex, ref);
         setFormFieldText(doc, resized, value);
 
-        return this.fitBadges(doc, this.findField(doc, pageIndex, name), value);
+        return this.fitBadges(doc, this.findField(doc, pageIndex, ref), value);
       },
       false,
       [pageIndex],
@@ -300,11 +301,11 @@ export class EditorSession {
   }
 
   /** Widen a field to hold its current value, and report the new width. */
-  async fitFormFieldWidth(pageIndex: number, name: string): Promise<CommitResult> {
+  async fitFormFieldWidth(pageIndex: number, ref: number): Promise<CommitResult> {
     return this.commit(
       'Widen form field',
       async (doc) => {
-        const field = this.findField(doc, pageIndex, name);
+        const field = this.findField(doc, pageIndex, ref);
         const fit = await measureFieldFit(doc, field, field.value);
         const applied = setFormFieldWidth(doc, field, fit.requiredWidth);
 
@@ -330,11 +331,11 @@ export class EditorSession {
    * Repainted, not regenerated, like every other form edit: the change is to
    * the widget's rectangle, and nothing in the content stream moved.
    */
-  moveFormField(pageIndex: number, name: string, dx: number, dy: number): CommitResult {
+  moveFormField(pageIndex: number, ref: number, dx: number, dy: number): CommitResult {
     return this.commitSync(
       'Move form field',
       (doc) => {
-        moveFormField(doc, this.findField(doc, pageIndex, name), dx, dy);
+        moveFormField(doc, this.findField(doc, pageIndex, ref), dx, dy);
         return [];
       },
       false,
@@ -343,9 +344,9 @@ export class EditorSession {
   }
 
   /** Ask whether a value fits a field, without changing anything. */
-  async measureFormField(pageIndex: number, name: string, value: string): Promise<FormFieldFit> {
+  async measureFormField(pageIndex: number, ref: number, value: string): Promise<FormFieldFit> {
     const doc = this.require();
-    return measureFieldFit(doc, this.findField(doc, pageIndex, name), value);
+    return measureFieldFit(doc, this.findField(doc, pageIndex, ref), value);
   }
 
   /**
@@ -401,12 +402,33 @@ export class EditorSession {
   }
 
   /** Tick or untick a checkbox, or select a radio button. */
-  toggleFormFieldValue(pageIndex: number, name: string): CommitResult {
+  toggleFormFieldValue(pageIndex: number, ref: number): CommitResult {
     return this.commitSync(
       'Tick form field',
       (doc) => {
-        const field = this.findField(doc, pageIndex, name);
+        const field = this.findField(doc, pageIndex, ref);
         toggleFormField(doc, field);
+        return [];
+      },
+      false,
+      [pageIndex],
+    );
+  }
+
+  /**
+   * Remove a field's widget from the page and from the form's field tree.
+   *
+   * Resolved by object number at the moment of removal, so a stale rectangle
+   * or a renumbered annotation list cannot remove the wrong widget.
+   */
+  removeFormField(pageIndex: number, ref: number): CommitResult {
+    return this.commitSync(
+      'Delete form field',
+      (doc) => {
+        const index = withAnnotIndexOf(doc, pageIndex, ref);
+        if (removeAnnotations(doc, pageIndex, [index]) === 0) {
+          throw new Error('Nothing was removed.');
+        }
         return [];
       },
       false,
@@ -598,15 +620,15 @@ export class EditorSession {
   }
 
   /**
-   * Resolve a field by name, at the moment of the mutation.
+   * Resolve a field by widget object number, at the moment of the mutation.
    *
-   * Looked up again rather than trusting the `FormFieldInfo` the UI is
-   * holding: undo reopens the document from bytes, so any handle or index
-   * captured when the editor opened would be stale by now.
+   * Looked up again rather than trusting the `FormFieldInfo` the UI holds:
+   * undo reopens the document from bytes, so a handle or index captured when
+   * the editor opened would be stale by now. The object number is not.
    */
-  private findField(doc: PdfDocument, pageIndex: number, name: string): FormFieldInfo {
-    const field = formFieldByName(doc, pageIndex, name);
-    if (!field) throw new Error(`The field "${name}" is no longer on this page.`);
+  private findField(doc: PdfDocument, pageIndex: number, ref: number): FormFieldInfo {
+    const field = formFieldByRef(doc, pageIndex, ref);
+    if (!field) throw new Error('That field is no longer on this page.');
     return field;
   }
 

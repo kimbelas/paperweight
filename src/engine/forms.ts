@@ -113,6 +113,11 @@ function readFormString(
   });
 }
 
+/** A widget's object number; 0 for a widget written as a direct object. */
+function widgetRef(doc: PdfDocument, annot: number): number {
+  return doc.mod.EPDFAnnot_GetObjectNumber(annot);
+}
+
 /**
  * Describe an open widget annotation as plain data.
  *
@@ -153,21 +158,25 @@ function describeField(
   const readOnly = (flags & FormFlag.ReadOnly) !== 0;
   const typeable = kind === 'text' || kind === 'choice';
   const clickable = kind === 'checkbox' || kind === 'radio';
+  const ref = widgetRef(doc, annot);
 
   return {
     page: pageIndex,
+    ref,
     name,
     kind,
     value,
     rect,
     readOnly,
-    editable: typeable && !readOnly,
-    toggleable: clickable && !readOnly,
+    editable: typeable && !readOnly && ref !== 0,
+    toggleable: clickable && !readOnly && ref !== 0,
     textSize: drawnSize(doc, annot, annotIndex, pageIndex, rect, siblings),
     clips: appearanceTrustworthyAt(doc, form, annot),
     notEditableReason: readOnly
       ? 'The form marks this field read-only, so its value is not meant to be changed here.'
-      : describeLimit(kind),
+      : ref === 0 && (typeable || clickable)
+        ? 'This field cannot be changed here: the file stores it in a form the editor cannot address.'
+        : describeLimit(kind),
   };
 }
 
@@ -255,16 +264,26 @@ export function formFieldByName(
   return listFormFields(doc, pageIndex).find((f) => f.name === name) ?? null;
 }
 
+/** Find a widget by its object number. */
+export function formFieldByRef(
+  doc: PdfDocument,
+  pageIndex: number,
+  ref: number,
+): FormFieldInfo | null {
+  return listFormFields(doc, pageIndex).find((f) => f.ref === ref) ?? null;
+}
+
 /**
- * Run `fn` with the widget annotation for a named field, then close it.
+ * Run `fn` with the widget annotation whose object number is `ref`, then
+ * close it.
  *
  * Mutations need the handle, and the handle must not escape: reopening the
- * page — which undo does — invalidates it.
+ * page, which undo does, invalidates it.
  */
 function withFieldAnnot<T>(
   doc: PdfDocument,
   pageIndex: number,
-  name: string,
+  ref: number,
   fn: (annot: number, form: number, annotIndex: number) => T,
 ): T {
   const { mod } = doc;
@@ -278,16 +297,18 @@ function withFieldAnnot<T>(
     const annot = mod.FPDFPage_GetAnnot(page, i);
     if (!annot) continue;
     try {
-      const found = readFormString(doc, annot, (b, n) =>
-        mod.FPDFAnnot_GetFormFieldName(form, annot, b, n),
-      );
-      if (found === name) return fn(annot, form, i);
+      if (widgetRef(doc, annot) === ref) return fn(annot, form, i);
     } finally {
       mod.FPDFPage_CloseAnnot(annot);
     }
   }
 
-  throw new Error(`The field "${name}" is no longer on this page.`);
+  throw new Error('That field is no longer on this page.');
+}
+
+/** The annotation index of the widget whose object number is `ref`. */
+export function withAnnotIndexOf(doc: PdfDocument, pageIndex: number, ref: number): number {
+  return withFieldAnnot(doc, pageIndex, ref, (_annot, _form, index) => index);
 }
 
 /**
@@ -340,7 +361,7 @@ export async function measureFieldFit(
 
 /** The type size a named field's `/DA` declares, or 0 when it says "auto". */
 function declaredFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
-  return withFieldAnnot(doc, field.page, field.name, (annot) => declaredSize(doc, annot));
+  return withFieldAnnot(doc, field.page, field.ref, (annot) => declaredSize(doc, annot));
 }
 
 /**
@@ -358,7 +379,7 @@ export function setFormFieldWidth(doc: PdfDocument, field: FormFieldInfo, width:
   const maxWidth = Math.max(MIN_FIELD_WIDTH, pageWidth - PAGE_MARGIN - field.rect.left);
   const clamped = Math.min(Math.max(width, MIN_FIELD_WIDTH), maxWidth);
 
-  withFieldAnnot(doc, field.page, field.name, (annot) => {
+  withFieldAnnot(doc, field.page, field.ref, (annot) => {
     withScope(mod, (scope) => {
       const ptr = scope.allocRectF();
       // FS_RECTF is left, top, right, bottom.
@@ -380,7 +401,7 @@ export function setFormFieldWidth(doc: PdfDocument, field: FormFieldInfo, width:
   // is laid out to the old box and the text stays clipped where it was.
   doc.invalidatePage(field.page);
 
-  const resized = formFieldByName(doc, field.page, field.name);
+  const resized = formFieldByRef(doc, field.page, field.ref);
   if (resized?.editable) setFormFieldText(doc, resized, resized.value);
 
   return clamped;
@@ -422,7 +443,7 @@ export function moveFormField(
   );
   const rect: Rect = { left, bottom, right: left + width, top: bottom + height };
 
-  withFieldAnnot(doc, field.page, field.name, (annot) => {
+  withFieldAnnot(doc, field.page, field.ref, (annot) => {
     withScope(mod, (scope) => {
       const ptr = scope.allocRectF();
       // FS_RECTF is left, top, right, bottom.
@@ -499,7 +520,7 @@ export function drawnAppearanceStyle(
   doc: PdfDocument,
   field: FormFieldInfo,
 ): { font: string; size: number } | null {
-  return withFieldAnnot(doc, field.page, field.name, (annot) => {
+  return withFieldAnnot(doc, field.page, field.ref, (annot) => {
     const match = TF.exec(readAppearance(doc, annot));
     return match ? { font: match[1], size: Number(match[2]) } : null;
   });
@@ -668,7 +689,7 @@ function pinTextSize(doc: PdfDocument, field: FormFieldInfo): boolean {
   const { mod } = doc;
   let changed = false;
 
-  withFieldAnnot(doc, field.page, field.name, (annot, _form, annotIndex) => {
+  withFieldAnnot(doc, field.page, field.ref, (annot, _form, annotIndex) => {
     const style = resolveTextSize(doc, field, annot, annotIndex);
     if (!style) return;
 
@@ -695,7 +716,7 @@ function round2(value: number): number {
  */
 function effectiveFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
   const siblings = pageTypeSizes(doc, field.page);
-  return withFieldAnnot(doc, field.page, field.name, (annot, _form, annotIndex) =>
+  return withFieldAnnot(doc, field.page, field.ref, (annot, _form, annotIndex) =>
     drawnSize(doc, annot, annotIndex, field.page, field.rect, siblings),
   );
 }
@@ -726,7 +747,7 @@ function appearanceTrustworthyAt(doc: PdfDocument, form: number, annot: number):
 
 /** `appearanceTrustworthyAt` for a named field, read fresh from the document. */
 export function appearanceIsTrustworthy(doc: PdfDocument, field: FormFieldInfo): boolean {
-  return withFieldAnnot(doc, field.page, field.name, (annot, form) =>
+  return withFieldAnnot(doc, field.page, field.ref, (annot, form) =>
     appearanceTrustworthyAt(doc, form, annot),
   );
 }
@@ -773,7 +794,7 @@ export async function convertFieldToText(
   const x = field.rect.left + FIELD_INSET;
   const baseline = field.rect.bottom + Math.max(1, (height - size) / 2 + size * 0.2);
 
-  const annotIndex = withFieldAnnot(doc, field.page, field.name, (_a, _f, index) => index);
+  const annotIndex = withFieldAnnot(doc, field.page, field.ref, (_a, _f, index) => index);
 
   // Remove the widget first: it holds the old value, and leaving it would
   // draw both at once.
