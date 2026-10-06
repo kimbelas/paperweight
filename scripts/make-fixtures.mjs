@@ -741,8 +741,9 @@ fixtures['mixed-orientation.pdf'] = () => {
 // Every field shape the form path has to handle and once did not: a radio
 // group (its options share a name), fixed and editable combos, a password
 // field with an auto size, Hidden and NoView widgets over page text, /MaxLen,
-// a size inherited from the parent field and from /AcroForm /DA, and one
-// field with two widgets. Fields were once looked up by name, which made
+// a size inherited from the parent field and from /AcroForm /DA, one field
+// with two widgets, and a tall combo with an auto size (Acrobat's default for
+// combos), which PDFium would otherwise redraw at the box height. Fields were once looked up by name, which made
 // every shared-name case act on the first widget.
 // ---------------------------------------------------------------------------
 fixtures['form-kinds.pdf'] = () => {
@@ -751,13 +752,13 @@ fixtures['form-kinds.pdf'] = () => {
   return buildPdf(
     [
       // 1 catalog
-      '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 20 0 R 21 0 R] ' +
+      '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 20 0 R 21 0 R 24 0 R] ' +
         '/DA (/Helv 9 Tf 0 g) /DR << /Font << /Helv 5 0 R /ZaDb 6 0 R >> >> >> >>',
       // 2 pages
       '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
       // 3 page
       '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R ' +
-        '/Annots [8 0 R 9 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 19 0 R 20 0 R 22 0 R 23 0 R] >>',
+        '/Annots [8 0 R 9 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 19 0 R 20 0 R 22 0 R 23 0 R 24 0 R] >>',
       // 4 contents
       stream(
         '',
@@ -813,6 +814,10 @@ fixtures['form-kinds.pdf'] = () => {
       `<< /FT /Tx /T (Shared) /V (SAME) ${DA10} /Kids [22 0 R 23 0 R] >>`,
       '<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /F 4 /Rect [200 400 300 416] >>',
       '<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /F 4 /Rect [320 400 420 416] >>',
+      // 24 fixed combo, auto size, 24pt tall
+      widget(
+        '/F 4 /FT /Ch /Ff 131072 /T (Size) /Opt [(Small) (Medium) (Large)] /V (Small) /Rect [200 360 360 384] /DA (/Helv 0 Tf 0 g)',
+      ),
     ],
     1,
   );

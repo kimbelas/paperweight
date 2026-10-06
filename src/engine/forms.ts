@@ -137,12 +137,6 @@ function widgetRef(doc: PdfDocument, annot: number): number {
   return doc.mod.EPDFAnnot_GetObjectNumber(annot);
 }
 
-/**
- * Describe an open widget annotation as plain data.
- *
- * `siblings` is shared across a whole listing so the page is
- * walked once rather than once per field. See `pageTypeSizes`.
- */
 /** A choice field's option labels, in order. */
 function readOptions(doc: PdfDocument, form: number, annot: number): string[] {
   const { mod } = doc;
@@ -156,6 +150,12 @@ function readOptions(doc: PdfDocument, form: number, annot: number): string[] {
   return options;
 }
 
+/**
+ * Describe an open widget annotation as plain data.
+ *
+ * `siblings` is shared across a whole listing so the page is
+ * walked once rather than once per field. See `pageTypeSizes`.
+ */
 function describeField(
   doc: PdfDocument,
   form: number,
@@ -186,6 +186,7 @@ function describeField(
   const typeable = kind === 'text' || kind === 'choice';
   const clickable = kind === 'checkbox' || kind === 'radio';
   const ref = widgetRef(doc, annot);
+  const password = kind === 'text' && (flags & FormFlag.Password) !== 0;
 
   return {
     page: pageIndex,
@@ -198,8 +199,10 @@ function describeField(
     editable: typeable && !readOnly && ref !== 0,
     toggleable: clickable && !readOnly && ref !== 0,
     textSize: drawnSize(doc, annot, ref, rect, siblings),
-    clips: appearanceTrustworthyAt(doc, form, annot),
-    password: kind === 'text' && (flags & FormFlag.Password) !== 0,
+    // A password field is never drawn into the page, so it stays a field and
+    // clips whatever its size says.
+    clips: password || appearanceTrustworthyAt(doc, form, annot),
+    password,
     maxLen: kind === 'text' ? readMaxLen(doc, annot) : undefined,
     options: kind === 'choice' ? readOptions(doc, form, annot) : undefined,
     editableChoice: kind === 'choice' && (flags & FormFlag.Edit) !== 0,
@@ -958,6 +961,11 @@ export function setFormFieldChoice(doc: PdfDocument, field: FormFieldInfo, value
     if (field.editableChoice) return setFormFieldText(doc, field, value);
     throw new Error(`"${value}" is not one of the choices this field offers.`);
   }
+
+  // Choosing rebuilds the appearance too, and a combo's `/DA` is often "auto"
+  // (Acrobat's default), which PDFium resolves to the box height. Pinning may
+  // reload the page, so the page handle is taken after it.
+  pinTextSize(doc, field);
 
   const page = doc.page(field.page);
   const { x, y } = centreOf(field);

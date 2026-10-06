@@ -332,7 +332,8 @@ export interface FormFieldInfo {
    * Only a field the engine will leave as a field clips. One whose appearance
    * PDFium cannot be trusted to rebuild is drawn into the page instead, and
    * page text runs on in full — so for those, neither the cut-off warning nor
-   * the offer to widen the box means anything.
+   * the offer to widen the box means anything. A password field is never
+   * drawn into the page, so it always clips.
    */
   clips: boolean;
   /** A password field: its value is masked and never drawn as page text. */

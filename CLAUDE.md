@@ -185,7 +185,9 @@ the decisions. `docs/research/01-editing-engines.md` and
 
   Only a field that stays a field clips, and `FormFieldInfo.clips` is that
   answer — the same condition as `appearanceIsTrustworthy`, since a value the
-  engine draws into the page instead runs on in full. It gates "Widen to fit"
+  engine draws into the page instead runs on in full. The one exemption is a
+  password field: it is never drawn into the page, so it stays a field and
+  clips whatever its size says. It gates "Widen to fit"
   and the cut-off warning together, because on a field that will be redrawn as
   page text both describe something the file does not do: the warning fires on
   a value nothing will cut, and the width the user then sets is discarded by

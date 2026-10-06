@@ -292,7 +292,7 @@ describe('through the session', () => {
     const surname = session.formFields(0).find((f) => f.name === 'Surname')!;
     const target = session.annotations(0).find((a) => a.bounds.left === surname.rect.left)!;
 
-    const result = session.removeAnnotationsAt(0, [target.index]);
+    const result = await session.removeAnnotationsAt(0, [target.index]);
     expect(result.changedPages).toEqual([0]);
     expect(session.formFields(0).map((f) => f.name)).not.toContain('Surname');
     expect(fieldRefs(session.save())).toEqual([6, 8, 10]);

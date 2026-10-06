@@ -36,7 +36,8 @@ const api = {
    * indistinguishable from a fix that does not work.
    */
   build: () => process.env.NEXT_PUBLIC_WORKER_STAMP ?? 'dev',
-  close: () => session.close(),
+  // Queued behind any edit still running; see `EditorSession.exclusive`.
+  close: () => session.exclusive(() => session.close()),
 
   // --- Reading -----------------------------------------------------------
 
@@ -115,13 +116,15 @@ const api = {
 
   // --- Output ------------------------------------------------------------
 
-  save: () => {
-    const bytes = session.save();
+  // Both wait for any edit still running, so a file is never written from a
+  // document halfway through a change.
+  save: async () => {
+    const bytes = await session.exclusive(() => session.save());
     return Comlink.transfer(bytes, [bytes.buffer]);
   },
 
-  extract: (indices: number[]) => {
-    const bytes = session.extract(indices);
+  extract: async (indices: number[]) => {
+    const bytes = await session.exclusive(() => session.extract(indices));
     return Comlink.transfer(bytes, [bytes.buffer]);
   },
 };
