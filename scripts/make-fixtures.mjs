@@ -796,7 +796,9 @@ fixtures['form-kinds.pdf'] = () => {
         `/F 4 /FT /Ch /Ff 393216 /T (City) /Opt [(Manila) (Tokyo)] /V (Tokyo) /Rect [200 630 360 648] ${DA10}`,
       ),
       // 14 password, auto size
-      widget('/F 4 /FT /Tx /Ff 8192 /T (Pin) /V (secret) /Rect [200 600 300 616] /DA (/Helv 0 Tf 0 g)'),
+      widget(
+        '/F 4 /FT /Tx /Ff 8192 /T (Pin) /V (secret) /Rect [200 600 300 616] /DA (/Helv 0 Tf 0 g)',
+      ),
       // 15 hidden, 16 no-view
       widget(`/F 2 /FT /Tx /T (HiddenBox) /V (HIDDEN) /Rect [195 558 360 576] ${DA10}`),
       widget(`/F 32 /FT /Tx /T (NoViewBox) /V (NOVIEW) /Rect [195 528 360 546] ${DA10}`),

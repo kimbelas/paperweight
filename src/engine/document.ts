@@ -484,7 +484,6 @@ export class PdfDocument {
       this.formInfoPtr = 0;
     }
 
-
     this.mod.pdfium.wasmExports.free(this.dataPtr);
     this.docHandle = 0;
     this.dataPtr = 0;
