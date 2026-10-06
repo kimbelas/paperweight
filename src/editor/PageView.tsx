@@ -26,9 +26,15 @@ import {
   IconWiden,
 } from './Icons';
 import { toImageData } from './imageData';
+import { ChoiceEditor } from './ChoiceEditor';
 import { InlineTextEditor } from './InlineTextEditor';
 import { OverlayLayer } from './OverlayLayer';
-import { nextOverlayId, useEditor } from './store';
+import { hitField, TOUCH_SLOP_PX } from './field-hit';
+import { useMediaQuery } from './media';
+import { useOnScreen } from './onscreen';
+import { trackPointer } from './pointer';
+import { pressHandlers } from './press';
+import { fieldSelection, nextOverlayId, useEditor } from './store';
 import {
   cssDeltaToPdf,
   cssRectToPdf,
@@ -61,6 +67,8 @@ interface PageViewProps {
   onCommitField: (field: FormFieldInfo, text: string, width?: number) => Promise<void>;
   onToggleField: (field: FormFieldInfo) => Promise<void>;
   onMoveSelection: (page: number, paths: number[][], dx: number, dy: number) => Promise<void>;
+  /** Move a selected form field by a delta in PDF points. */
+  onMoveField: (field: FormFieldInfo, dx: number, dy: number) => Promise<void>;
   /** Delete named objects outright, without selecting them first. */
   onDeleteObjects: (page: number, paths: number[][]) => Promise<void>;
   /** Widen a field to hold its current value. */
@@ -109,6 +117,7 @@ export function PageView({
   onCommitField,
   onToggleField,
   onMoveSelection,
+  onMoveField,
   onDeleteObjects,
   onWidenField,
   onDeleteField,
@@ -125,6 +134,31 @@ export function PageView({
   const [ocrTarget, setOcrTarget] = useState<OcrLine | null>(null);
   const [fieldTarget, setFieldTarget] = useState<FormFieldInfo | null>(null);
   const [menu, setMenu] = useState<MenuRequest | null>(null);
+  const [fields, setFields] = useState<FormFieldInfo[]>([]);
+  const coarse = useMediaQuery('(pointer: coarse)');
+
+  // The page's fields, refetched whenever the page changed. Tap hit-testing
+  // runs on this list; see `hitField` for why it does not ask the worker.
+  useEffect(() => {
+    let cancelled = false;
+    engine
+      .formFields(page.index)
+      .then((list) => {
+        if (!cancelled) setFields(list);
+      })
+      .catch(() => {
+        if (!cancelled) setFields([]);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [engine, page.index, renderToken]);
+
+  const fieldAt = useCallback(
+    (x: number, y: number, slop = coarse ? TOUCH_SLOP_PX : 0) =>
+      transform ? hitField(fields, transform, x, y, slop) : null,
+    [fields, transform, coarse],
+  );
 
   const tool = useEditor((s) => s.tool);
   const editingLine = useEditor((s) => s.editingLine);
@@ -238,7 +272,7 @@ export function PageView({
    */
   const findEditable = useCallback(
     async (x: number, y: number): Promise<EditTarget | null> => {
-      const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
+      const field = fieldAt(x, y);
       if (field) return { kind: 'field', field };
 
       const line = await engine.lineAt(page.index, cssWidth, cssHeight, x, y);
@@ -249,7 +283,7 @@ export function PageView({
       const recognised = ocrLineAt(ocrLines, point.x, point.y);
       return recognised ? { kind: 'ocr', line: recognised } : null;
     },
-    [page.index, ocrLines, engine, cssWidth, cssHeight],
+    [fieldAt, page.index, ocrLines, engine, cssWidth, cssHeight],
   );
 
   /**
@@ -276,7 +310,7 @@ export function PageView({
    */
   const findAnything = useCallback(
     async (x: number, y: number): Promise<PageHit | null> => {
-      const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
+      const field = fieldAt(x, y, 0);
       if (field) return { kind: 'field', field };
 
       const [object, line, point] = await Promise.all([
@@ -302,16 +336,17 @@ export function PageView({
       const recognised = ocrLineAt(ocrLines, point.x, point.y);
       return recognised ? { kind: 'ocr', line: recognised } : null;
     },
-    [engine, page.index, cssWidth, cssHeight, ocrLines],
+    [fieldAt, engine, page.index, cssWidth, cssHeight, ocrLines],
   );
 
   /**
    * Put a form field into the state a click on it should produce.
    *
-   * A field is offered for editing whatever tool is armed. Clicking a box and
-   * having it come alive is what every PDF viewer does, and demanding that the
-   * right tool be picked first was the difference between "this app fills in
-   * forms" and "this app does nothing when I click the form".
+   * Clicking a box and having it come alive is what every PDF viewer does,
+   * and a form that does nothing when clicked reads as a form that cannot be
+   * filled in. The Edit text tool does this on the first click. The Select
+   * tool, whose job is arranging things, selects the field first — see
+   * `selectField` — and comes here on the next click, or on Enter.
    */
   const activateField = useCallback(
     async (field: FormFieldInfo) => {
@@ -332,6 +367,46 @@ export function PageView({
     },
     [setEditingLine, setSelection, selectOverlay, onToggleField, notify],
   );
+
+  /**
+   * Select a form field, so it can be dragged or deleted like anything else.
+   *
+   * What the Select tool does to everything on the page, done to a field: the
+   * outline is the drag handle. Editing is one click away — on the outline,
+   * or Enter — and the outline's chip says so, which keeps a form visibly
+   * alive on the first click without turning the drag handle into a text box.
+   */
+  const selectField = useCallback(
+    (field: FormFieldInfo) => {
+      setEditingLine(null);
+      setOcrTarget(null);
+      setFieldTarget(null);
+      selectOverlay(null);
+      setSelection(fieldSelection(field));
+    },
+    [setEditingLine, selectOverlay, setSelection],
+  );
+
+  // Enter edits the selected field, as the outline promises. Only the page
+  // holding the selection listens, and never while something is being typed.
+  useEffect(() => {
+    const field = selection?.page === page.index ? selection.field : undefined;
+    if (!field) return;
+    const onKey = (event: KeyboardEvent) => {
+      if (event.key !== 'Enter') return;
+      const target = event.target as HTMLElement | null;
+      if (
+        target &&
+        (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable)
+      ) {
+        return;
+      }
+      event.preventDefault();
+      void activateField(field);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [selection, page.index, activateField]);
 
   /** Select an object so it can be dragged or deleted. */
   const selectObject = useCallback(
@@ -506,8 +581,7 @@ export function PageView({
           // asking the worker for the whole object list that often is a cost
           // the outline is not worth. A field is the one thing whose click
           // behaviour differs from the tool's, so it is the one worth marking.
-          const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
-          setHover(field ? field.rect : null);
+          setHover(fieldAt(x, y, 0)?.rect ?? null);
           return;
         }
         const found = await findEditable(x, y);
@@ -516,18 +590,22 @@ export function PageView({
         setHover(null);
       }
     },
-    [tool, editTarget, hover, localPoint, findEditable, engine, page.index, cssWidth, cssHeight],
+    [tool, editTarget, hover, localPoint, findEditable, fieldAt],
   );
 
   const handleClick = useCallback(
     async (event: React.MouseEvent) => {
       const { x, y } = localPoint(event);
 
-      // Asked first, and for every tool. See `activateField`.
+      // Asked first, for both tools that answer a click. The Edit text tool
+      // edits the field at once; the Select tool selects it, and the outline
+      // takes the next click. See `activateField` and `selectField`.
       if (tool === 'edit-text' || tool === 'select') {
-        const field = await engine.formFieldAt(page.index, cssWidth, cssHeight, x, y);
+        // Synchronous, so an editor opened here is focused inside the tap.
+        const field = fieldAt(x, y);
         if (field) {
-          await activateField(field);
+          if (tool === 'select') selectField(field);
+          else await activateField(field);
           return;
         }
       }
@@ -578,8 +656,10 @@ export function PageView({
     [
       tool,
       localPoint,
+      fieldAt,
       findEditable,
       activateField,
+      selectField,
       selectObject,
       addTextAt,
       placeMark,
@@ -721,6 +801,14 @@ export function PageView({
             onSelect: () => {},
           });
         }
+
+        entries.push({
+          id: 'select',
+          label: 'Select it',
+          hint: 'Then drag it to move it',
+          icon: <IconSelect size={15} />,
+          onSelect: () => selectField(field),
+        });
 
         entries.push({ id: 's1', separator: true });
         entries.push({
@@ -953,54 +1041,47 @@ export function PageView({
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
       if (tool !== 'cover' || !transform) return;
-      event.preventDefault();
       const start = localPoint(event);
-      const target = event.currentTarget as HTMLElement;
-      target.setPointerCapture(event.pointerId);
-
-      const move = (moveEvent: PointerEvent) => {
-        const box = canvasRef.current?.getBoundingClientRect();
-        if (!box) return;
-        const cx = moveEvent.clientX - box.left;
-        const cy = moveEvent.clientY - box.top;
-        setMarquee({
-          x: Math.min(start.x, cx),
-          y: Math.min(start.y, cy),
-          w: Math.abs(cx - start.x),
-          h: Math.abs(cy - start.y),
-        });
-      };
-
-      const up = async () => {
-        target.releasePointerCapture(event.pointerId);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-
-        const box = marqueeRef.current;
-        setMarquee(null);
-        if (!box || box.w < 4 || box.h < 4) return;
-
-        const rect = cssRectToPdf(transform, {
-          left: box.x,
-          top: box.y,
-          width: box.w,
-          height: box.h,
-        });
-
-        // Sample the page behind the rectangle so a cover over a shaded cell
-        // or a coloured band matches it, instead of leaving a white patch.
-        let colour = { r: 255, g: 255, b: 255, a: 255 };
-        try {
-          colour = await engine.sampleBackground(page.index, rect);
-        } catch {
-          /* White is a reasonable default if sampling fails. */
-        }
-
-        addOverlay({ id: nextOverlayId(), page: page.index, rect, kind: 'cover', colour });
-      };
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
+      const started = trackPointer(
+        event,
+        {
+          onMove: (dx, dy) => {
+            const cx = start.x + dx;
+            const cy = start.y + dy;
+            setMarquee({
+              x: Math.min(start.x, cx),
+              y: Math.min(start.y, cy),
+              w: Math.abs(cx - start.x),
+              h: Math.abs(cy - start.y),
+            });
+          },
+          onCancel: () => setMarquee(null),
+          onEnd: () => {
+            const box = marqueeRef.current;
+            setMarquee(null);
+            if (!box || box.w < 4 || box.h < 4) return;
+            const rect = cssRectToPdf(transform, {
+              left: box.x,
+              top: box.y,
+              width: box.w,
+              height: box.h,
+            });
+            void (async () => {
+              // Sample the page behind the rectangle so a cover over a shaded
+              // cell matches it instead of leaving a white patch.
+              let colour = { r: 255, g: 255, b: 255, a: 255 };
+              try {
+                colour = await engine.sampleBackground(page.index, rect);
+              } catch {
+                /* White is a reasonable default if sampling fails. */
+              }
+              addOverlay({ id: nextOverlayId(), page: page.index, rect, kind: 'cover', colour });
+            })();
+          },
+        },
+        { capture: event.currentTarget },
+      );
+      if (started) event.preventDefault();
     },
     [tool, transform, localPoint, engine, page.index, addOverlay],
   );
@@ -1018,6 +1099,8 @@ export function PageView({
           ? 'crosshair'
           : 'default';
 
+  const selectedField = selection && selection.page === page.index ? selection.field : undefined;
+
   return (
     <div
       ref={wrapperRef}
@@ -1029,7 +1112,9 @@ export function PageView({
       <canvas
         ref={canvasRef}
         className="page-sheet block h-full w-full"
-        style={{ cursor }}
+        // Cover drags out a patch with one finger, so panning is taken; the
+        // pinch is never taken, or the page could not be zoomed while it is armed.
+        style={{ cursor, touchAction: tool === 'cover' ? 'pinch-zoom' : undefined }}
         onClick={handleClick}
         onPointerMove={handleMove}
         onPointerLeave={() => setHover(null)}
@@ -1091,9 +1176,30 @@ export function PageView({
           transform={transform}
           page={page.index}
           paths={selection.paths}
+          rect={selectedField?.rect}
           label={selection.label}
+          touch={coarse}
+          hint={
+            selectedField
+              ? coarse
+                ? 'Tap again to edit'
+                : 'Drag to move · Click again to edit · Delete to remove'
+              : coarse
+                ? 'Drag to move'
+                : undefined
+          }
+          onDelete={
+            selectedField
+              ? () => void onDeleteField(selectedField).then(() => setSelection(null))
+              : undefined
+          }
           renderToken={renderToken}
-          onMove={(dx, dy) => onMoveSelection(page.index, selection.paths, dx, dy)}
+          onMove={(dx, dy) =>
+            selectedField
+              ? onMoveField(selectedField, dx, dy)
+              : onMoveSelection(page.index, selection.paths, dx, dy)
+          }
+          onActivate={selectedField ? () => void activateField(selectedField) : undefined}
         />
       )}
 
@@ -1113,36 +1219,59 @@ export function PageView({
 
       {transform && <OverlayLayer items={pageOverlay} transform={transform} zoom={zoom} />}
 
-      {editTarget?.kind === 'field' && transform && (
-        <InlineTextEditor
-          key={`field:${editTarget.field.name}`}
-          text={editTarget.field.value}
-          bounds={editTarget.field.rect}
-          // The size the engine says the value is really drawn at, not a
-          // guess from the widget's height. The two are unrelated: a 24pt-tall
-          // box on a form set in 9pt is ordinary, and guessing from the box
-          // showed such a value at 14pt — it swelled the moment it was
-          // clicked, and "Widen to fit" then sized the box to that fiction.
-          fontSize={editTarget.field.textSize}
-          colour={{ r: 0, g: 0, b: 0, a: 255 }}
-          hint={`Enter to update ${formFieldPhrase(editTarget.field)} · Esc to cancel`}
-          // A field's width is part of the document, but only while it stays a
-          // field: it clips its own appearance, so a value wider than the box
-          // is cut off in the file. A field the engine will draw into the page
-          // instead does not clip, so there is nothing to widen and nothing to
-          // warn about.
-          widenable={editTarget.field.editable && editTarget.field.clips}
-          maxWidth={page.width - 6 - editTarget.field.rect.left}
-          transform={transform}
-          zoom={zoom}
-          onCancel={() => setFieldTarget(null)}
-          onCommit={async (value, width) => {
-            const field = editTarget.field;
-            setFieldTarget(null);
-            await onCommitField(field, value, width);
-          }}
-        />
-      )}
+      {editTarget?.kind === 'field' &&
+        transform &&
+        editTarget.field.kind === 'choice' &&
+        !editTarget.field.editableChoice && (
+          <ChoiceEditor
+            key={`choice:${editTarget.field.ref}`}
+            field={editTarget.field}
+            transform={transform}
+            onCancel={() => setFieldTarget(null)}
+            onCommit={async (value) => {
+              const field = editTarget.field;
+              setFieldTarget(null);
+              if (value !== field.value) await onCommitField(field, value);
+            }}
+          />
+        )}
+
+      {editTarget?.kind === 'field' &&
+        transform &&
+        !(editTarget.field.kind === 'choice' && !editTarget.field.editableChoice) && (
+          <InlineTextEditor
+            key={`field:${editTarget.field.ref}`}
+            text={editTarget.field.value}
+            bounds={editTarget.field.rect}
+            // The size the engine says the value is really drawn at, not a
+            // guess from the widget's height. The two are unrelated: a 24pt-tall
+            // box on a form set in 9pt is ordinary, and guessing from the box
+            // showed such a value at 14pt — it swelled the moment it was
+            // clicked, and "Widen to fit" then sized the box to that fiction.
+            fontSize={editTarget.field.textSize}
+            colour={{ r: 0, g: 0, b: 0, a: 255 }}
+            hint={`Enter to update ${formFieldPhrase(editTarget.field)} · Esc to cancel`}
+            // A field's width is part of the document, but only while it stays a
+            // field: it clips its own appearance, so a value wider than the box
+            // is cut off in the file. A field the engine will draw into the page
+            // instead does not clip, so there is nothing to widen and nothing to
+            // warn about.
+            widenable={editTarget.field.editable && editTarget.field.clips}
+            maxWidth={page.width - 6 - editTarget.field.rect.left}
+            password={editTarget.field.password}
+            maxLength={editTarget.field.maxLen}
+            transform={transform}
+            zoom={zoom}
+            onCancel={() => setFieldTarget(null)}
+            onCommit={async (value, width) => {
+              const field = editTarget.field;
+              // Only if it is still this field: an editor replaced by a tap on
+              // another one commits as it unmounts, after the next is open.
+              setFieldTarget((t) => (t?.ref === field.ref ? null : t));
+              await onCommitField(field, value, width);
+            }}
+          />
+        )}
 
       {editTarget && editTarget.kind !== 'field' && transform && (
         <InlineTextEditor
@@ -1173,13 +1302,15 @@ export function PageView({
             setOcrTarget(null);
           }}
           onCommit={async (value) => {
+            // Cleared only if still this line, as for a field above.
             if (editTarget.kind === 'ocr') {
               const line = editTarget.line;
-              setOcrTarget(null);
+              setOcrTarget((t) => (t === line ? null : t));
               await onCommitOcr(line, value);
             } else {
               const line = editTarget.line;
-              setEditingLine(null);
+              const open = useEditor.getState().editingLine;
+              if (open?.id === line.id && open.page === line.page) setEditingLine(null);
               await onCommitText(page.index, line.id, value);
             }
           }}
@@ -1216,23 +1347,43 @@ function SelectionOutline({
   transform,
   page,
   paths,
+  rect: fixed,
   label,
+  hint,
   renderToken,
   onMove,
+  onActivate,
+  onDelete,
+  touch,
 }: {
   engine: Engine;
   transform: PageTransform;
   page: number;
   paths: number[][];
+  /**
+   * The box to outline, when it is known outright — a form field's own
+   * rectangle. Otherwise it is the union of the objects at `paths`.
+   */
+  rect?: Rect;
   label: string;
+  /** What the chip above the outline says while nothing is being dragged. */
+  hint?: string;
   renderToken: number;
   onMove: (dx: number, dy: number) => void | Promise<void>;
+  /** A press on the outline that did not travel far enough to be a drag. */
+  onActivate?: () => void;
+  /** Removes the selected field; offered as a button on touch, where there is no Delete key. */
+  onDelete?: () => void;
+  /** A coarse pointer: the chip carries buttons instead of naming keys. */
+  touch?: boolean;
 }) {
-  const [rect, setRect] = useState<Rect | null>(null);
+  const chipRef = useRef<HTMLDivElement | null>(null);
+  const [found, setFound] = useState<Rect | null>(null);
   const [drag, setDrag] = useState<{ x: number; y: number } | null>(null);
   const key = paths.map((p) => p.join('.')).join('|');
 
   useEffect(() => {
+    if (fixed) return;
     let cancelled = false;
     engine
       .objects(page)
@@ -1242,47 +1393,46 @@ function SelectionOutline({
         const hit = objects.filter((o) => wanted.has(o.path.join('.')));
         // The union, so a line made of many objects gets one outline rather
         // than a box around each word.
-        setRect(hit.length === 0 ? null : hit.map((o) => o.bounds).reduce(unionRect));
+        setFound(hit.length === 0 ? null : hit.map((o) => o.bounds).reduce(unionRect));
       })
-      .catch(() => setRect(null));
+      .catch(() => setFound(null));
     return () => {
       cancelled = true;
     };
-  }, [engine, page, key, renderToken]);
+  }, [engine, page, key, renderToken, fixed]);
+
+  const rect = fixed ?? found;
+  const chip = useOnScreen(chipRef, [rect, drag === null, hint, touch]);
 
   const startDrag = useCallback(
     (event: React.PointerEvent) => {
+      const started = trackPointer(
+        event,
+        {
+          onMove: (x, y) => setDrag({ x, y }),
+          onCancel: () => setDrag(null),
+          onEnd: (x, y, moved) => {
+            setDrag(null);
+            // A press that did not travel is a tap: it must not nudge anything
+            // or leave an undo entry, and on a form field it opens the value.
+            // Decided here rather than in a click handler, because the
+            // pointerdown below calls `preventDefault` and WebKit then never
+            // synthesises the click that would follow.
+            if (!moved) {
+              onActivate?.();
+              return;
+            }
+            const { dx, dy } = cssDeltaToPdf(transform, x, y);
+            void onMove(dx, dy);
+          },
+        },
+        { capture: event.currentTarget },
+      );
+      if (!started) return;
       event.preventDefault();
       event.stopPropagation();
-      const target = event.currentTarget as HTMLElement;
-      target.setPointerCapture(event.pointerId);
-
-      const startX = event.clientX;
-      const startY = event.clientY;
-      let last = { x: 0, y: 0 };
-
-      const move = (moveEvent: PointerEvent) => {
-        last = { x: moveEvent.clientX - startX, y: moveEvent.clientY - startY };
-        setDrag(last);
-      };
-
-      const up = () => {
-        target.releasePointerCapture(event.pointerId);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-        setDrag(null);
-
-        // Ignore a click that merely wobbled, so selecting something does not
-        // nudge it a pixel and leave an undo entry behind.
-        if (Math.hypot(last.x, last.y) < 3) return;
-        const { dx, dy } = cssDeltaToPdf(transform, last.x, last.y);
-        void onMove(dx, dy);
-      };
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
     },
-    [transform, onMove],
+    [transform, onMove, onActivate],
   );
 
   if (!rect) return null;
@@ -1295,6 +1445,10 @@ function SelectionOutline({
         outline: '2px solid var(--app-selection)',
         outlineOffset: 1,
         cursor: 'move',
+        // Without this a finger drag is taken as a page pan: the browser
+        // cancels the pointer and the field never moves. Only the outline, so
+        // the page itself keeps pinch-zoom.
+        touchAction: 'none',
         background: drag ? 'color-mix(in srgb, var(--app-accent) 10%, transparent)' : 'transparent',
         transform: drag ? `translate(${drag.x}px, ${drag.y}px)` : undefined,
       }}
@@ -1302,12 +1456,42 @@ function SelectionOutline({
       role="group"
       aria-label={`Selected: ${label}. Drag to move.`}
     >
-      <span
-        className="pointer-events-none absolute whitespace-nowrap rounded px-1.5 py-0.5 text-[11px]"
-        style={{ top: -21, left: 0, background: 'var(--app-selection)', color: '#fff' }}
+      <div
+        ref={chipRef}
+        className="absolute flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]"
+        style={{
+          ...(chip.below ? { top: '100%', marginTop: 4 } : { bottom: '100%', marginBottom: 4 }),
+          left: 0,
+          transform: chip.dx ? `translateX(${chip.dx}px)` : undefined,
+          maxWidth: 'min(calc(100vw - 16px), 460px)',
+          background: 'var(--app-selection)',
+          color: '#fff',
+        }}
       >
-        {drag ? 'Release to place' : 'Drag to move · Delete to remove'}
-      </span>
+        <span className="pointer-events-none">
+          {drag ? 'Release to place' : (hint ?? 'Drag to move · Delete to remove')}
+        </span>
+        {touch && !drag && onActivate && (
+          <button
+            type="button"
+            {...pressHandlers(onActivate)}
+            className="rounded px-3 font-semibold"
+            style={{ background: '#fff', color: 'var(--app-selection)', minHeight: 44 }}
+          >
+            Edit
+          </button>
+        )}
+        {touch && !drag && onDelete && (
+          <button
+            type="button"
+            {...pressHandlers(onDelete)}
+            className="rounded px-3"
+            style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', minHeight: 44 }}
+          >
+            Delete
+          </button>
+        )}
+      </div>
     </div>
   );
 }

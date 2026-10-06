@@ -39,6 +39,9 @@ const PAGE_MARGIN = 6;
  */
 const FIELD_INSET = 2;
 
+/** The virtual key code for Enter, as `FORM_OnKeyDown` takes it. */
+const KEY_ENTER = 0x0d;
+
 /** `FPDF_FORMFLAG_*` — fpdf_annot.h, plus the text-field bits from the spec. */
 const FormFlag = {
   ReadOnly: 1 << 0,
@@ -46,6 +49,10 @@ const FormFlag = {
   NoExport: 1 << 2,
   /** Text spans lines, so a single-line redraw would not reproduce it. */
   Multiline: 1 << 12,
+  /** The value is masked as it is typed. */
+  Password: 1 << 13,
+  /** A combo box whose value can also be typed. */
+  Edit: 1 << 18,
   /**
    * One character per cell, spread across the box.
    *
@@ -55,6 +62,18 @@ const FormFlag = {
    */
   Comb: 1 << 24,
 } as const;
+
+/** `/F` annotation flags, PDF 32000 table 165. */
+const AnnotFlag = {
+  Hidden: 1 << 1,
+  NoView: 1 << 5,
+} as const;
+
+/** A widget that is not drawn on screen is not something a user can tap. */
+function isShown(doc: PdfDocument, annot: number): boolean {
+  const flags = doc.mod.FPDFAnnot_GetFlags(annot);
+  return (flags & (AnnotFlag.Hidden | AnnotFlag.NoView)) === 0;
+}
 
 /** Map PDFium's field type onto something the interface can say out loud. */
 function kindOf(type: number): FormFieldKind {
@@ -113,14 +132,28 @@ function readFormString(
   });
 }
 
+/** A widget's object number; 0 for a widget written as a direct object. */
+function widgetRef(doc: PdfDocument, annot: number): number {
+  return doc.mod.EPDFAnnot_GetObjectNumber(annot);
+}
+
+/** A choice field's option labels, in order. */
+function readOptions(doc: PdfDocument, form: number, annot: number): string[] {
+  const { mod } = doc;
+  const count = mod.FPDFAnnot_GetOptionCount(form, annot);
+  const options: string[] = [];
+  for (let i = 0; i < count; i++) {
+    options.push(
+      readFormString(doc, annot, (b, n) => mod.FPDFAnnot_GetOptionLabel(form, annot, i, b, n)),
+    );
+  }
+  return options;
+}
+
 /**
  * Describe an open widget annotation as plain data.
  *
- * `annotIndex` is the widget's position in the page's annotation list, which
- * is how the appearance sizes recorded at open time are keyed. It is asked
- * for rather than looked up here because both callers already know it.
- *
- * `siblings` likewise: it is shared across a whole listing so the page is
+ * `siblings` is shared across a whole listing so the page is
  * walked once rather than once per field. See `pageTypeSizes`.
  */
 function describeField(
@@ -128,7 +161,6 @@ function describeField(
   form: number,
   annot: number,
   pageIndex: number,
-  annotIndex: number,
   siblings: () => number[],
 ): FormFieldInfo {
   const { mod } = doc;
@@ -153,21 +185,32 @@ function describeField(
   const readOnly = (flags & FormFlag.ReadOnly) !== 0;
   const typeable = kind === 'text' || kind === 'choice';
   const clickable = kind === 'checkbox' || kind === 'radio';
+  const ref = widgetRef(doc, annot);
+  const password = kind === 'text' && (flags & FormFlag.Password) !== 0;
 
   return {
     page: pageIndex,
+    ref,
     name,
     kind,
     value,
     rect,
     readOnly,
-    editable: typeable && !readOnly,
-    toggleable: clickable && !readOnly,
-    textSize: drawnSize(doc, annot, annotIndex, pageIndex, rect, siblings),
-    clips: appearanceTrustworthyAt(doc, form, annot),
+    editable: typeable && !readOnly && ref !== 0,
+    toggleable: clickable && !readOnly && ref !== 0,
+    textSize: drawnSize(doc, annot, ref, rect, siblings),
+    // A password field is never drawn into the page, so it stays a field and
+    // clips whatever its size says.
+    clips: password || appearanceTrustworthyAt(doc, form, annot),
+    password,
+    maxLen: kind === 'text' ? readMaxLen(doc, annot) : undefined,
+    options: kind === 'choice' ? readOptions(doc, form, annot) : undefined,
+    editableChoice: kind === 'choice' && (flags & FormFlag.Edit) !== 0,
     notEditableReason: readOnly
       ? 'The form marks this field read-only, so its value is not meant to be changed here.'
-      : describeLimit(kind),
+      : ref === 0 && (typeable || clickable)
+        ? 'This field cannot be changed here: the file stores it in a form the editor cannot address.'
+        : describeLimit(kind),
   };
 }
 
@@ -200,15 +243,13 @@ export function formFieldAt(
   });
   if (!annot) return null;
 
+  if (!isShown(doc, annot)) {
+    mod.FPDFPage_CloseAnnot(annot);
+    return null;
+  }
+
   try {
-    return describeField(
-      doc,
-      form,
-      annot,
-      pageIndex,
-      mod.FPDFPage_GetAnnotIndex(page, annot),
-      pageTypeSizes(doc, pageIndex),
-    );
+    return describeField(doc, form, annot, pageIndex, pageTypeSizes(doc, pageIndex));
   } finally {
     mod.FPDFPage_CloseAnnot(annot);
   }
@@ -229,7 +270,8 @@ export function listFormFields(doc: PdfDocument, pageIndex: number): FormFieldIn
     const annot = mod.FPDFPage_GetAnnot(page, i);
     if (!annot) continue;
     try {
-      const field = describeField(doc, form, annot, pageIndex, i, siblings);
+      if (!isShown(doc, annot)) continue;
+      const field = describeField(doc, form, annot, pageIndex, siblings);
       // A non-widget annotation reports an unknown field type and no name.
       if (field.kind !== 'unknown' || field.name) fields.push(field);
     } finally {
@@ -255,16 +297,26 @@ export function formFieldByName(
   return listFormFields(doc, pageIndex).find((f) => f.name === name) ?? null;
 }
 
+/** Find a widget by its object number. */
+export function formFieldByRef(
+  doc: PdfDocument,
+  pageIndex: number,
+  ref: number,
+): FormFieldInfo | null {
+  return listFormFields(doc, pageIndex).find((f) => f.ref === ref) ?? null;
+}
+
 /**
- * Run `fn` with the widget annotation for a named field, then close it.
+ * Run `fn` with the widget annotation whose object number is `ref`, then
+ * close it.
  *
  * Mutations need the handle, and the handle must not escape: reopening the
- * page — which undo does — invalidates it.
+ * page, which undo does, invalidates it.
  */
 function withFieldAnnot<T>(
   doc: PdfDocument,
   pageIndex: number,
-  name: string,
+  ref: number,
   fn: (annot: number, form: number, annotIndex: number) => T,
 ): T {
   const { mod } = doc;
@@ -278,16 +330,18 @@ function withFieldAnnot<T>(
     const annot = mod.FPDFPage_GetAnnot(page, i);
     if (!annot) continue;
     try {
-      const found = readFormString(doc, annot, (b, n) =>
-        mod.FPDFAnnot_GetFormFieldName(form, annot, b, n),
-      );
-      if (found === name) return fn(annot, form, i);
+      if (widgetRef(doc, annot) === ref) return fn(annot, form, i);
     } finally {
       mod.FPDFPage_CloseAnnot(annot);
     }
   }
 
-  throw new Error(`The field "${name}" is no longer on this page.`);
+  throw new Error('That field is no longer on this page.');
+}
+
+/** The annotation index of the widget whose object number is `ref`. */
+export function withAnnotIndexOf(doc: PdfDocument, pageIndex: number, ref: number): number {
+  return withFieldAnnot(doc, pageIndex, ref, (_annot, _form, index) => index);
 }
 
 /**
@@ -340,7 +394,7 @@ export async function measureFieldFit(
 
 /** The type size a named field's `/DA` declares, or 0 when it says "auto". */
 function declaredFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
-  return withFieldAnnot(doc, field.page, field.name, (annot) => declaredSize(doc, annot));
+  return withFieldAnnot(doc, field.page, field.ref, (annot) => declaredSize(doc, annot));
 }
 
 /**
@@ -358,7 +412,7 @@ export function setFormFieldWidth(doc: PdfDocument, field: FormFieldInfo, width:
   const maxWidth = Math.max(MIN_FIELD_WIDTH, pageWidth - PAGE_MARGIN - field.rect.left);
   const clamped = Math.min(Math.max(width, MIN_FIELD_WIDTH), maxWidth);
 
-  withFieldAnnot(doc, field.page, field.name, (annot) => {
+  withFieldAnnot(doc, field.page, field.ref, (annot) => {
     withScope(mod, (scope) => {
       const ptr = scope.allocRectF();
       // FS_RECTF is left, top, right, bottom.
@@ -380,10 +434,78 @@ export function setFormFieldWidth(doc: PdfDocument, field: FormFieldInfo, width:
   // is laid out to the old box and the text stays clipped where it was.
   doc.invalidatePage(field.page);
 
-  const resized = formFieldByName(doc, field.page, field.name);
+  const resized = formFieldByRef(doc, field.page, field.ref);
   if (resized?.editable) setFormFieldText(doc, resized, resized.value);
 
   return clamped;
+}
+
+/**
+ * Move a field by a delta in points, keeping its size.
+ *
+ * Position is the user's to change, as width is; only the type size is not.
+ * A translation needs no appearance rebuild — the appearance stream is drawn
+ * relative to `/Rect`, so it travels with the box — but the form-fill
+ * environment caches a widget's geometry for as long as the page is open, so
+ * the page is reloaded afterwards for the same reason `setFormFieldWidth`
+ * does: without it a click on the moved box lands on the widget PDFium still
+ * believes is at the old place.
+ *
+ * The box is kept inside the page's own box, read from the page rather than
+ * taken from its width and height: `/Rect` is in unrotated user space, and on
+ * a rotated page those two are the wrong way round.
+ */
+export function moveFormField(
+  doc: PdfDocument,
+  field: FormFieldInfo,
+  dx: number,
+  dy: number,
+): Rect {
+  const { mod } = doc;
+  const width = field.rect.right - field.rect.left;
+  const height = field.rect.top - field.rect.bottom;
+  const page = pageBox(doc, field.page);
+
+  const left = Math.max(
+    page.left + PAGE_MARGIN,
+    Math.min(page.right - PAGE_MARGIN - width, field.rect.left + dx),
+  );
+  const bottom = Math.max(
+    page.bottom + PAGE_MARGIN,
+    Math.min(page.top - PAGE_MARGIN - height, field.rect.bottom + dy),
+  );
+  const rect: Rect = { left, bottom, right: left + width, top: bottom + height };
+
+  withFieldAnnot(doc, field.page, field.ref, (annot) => {
+    withScope(mod, (scope) => {
+      const ptr = scope.allocRectF();
+      // FS_RECTF is left, top, right, bottom.
+      mod.pdfium.setValue(ptr, rect.left, 'float');
+      mod.pdfium.setValue(ptr + 4, rect.top, 'float');
+      mod.pdfium.setValue(ptr + 8, rect.right, 'float');
+      mod.pdfium.setValue(ptr + 12, rect.bottom, 'float');
+      if (!mod.FPDFAnnot_SetRect(annot, ptr)) {
+        throw new Error('That field could not be moved.');
+      }
+    });
+  });
+
+  doc.invalidatePage(field.page);
+  return rect;
+}
+
+/** The page's own box in user space, which is the space `/Rect` lives in. */
+function pageBox(doc: PdfDocument, pageIndex: number): Rect {
+  const { mod } = doc;
+  const page = doc.page(pageIndex);
+  return withScope(mod, (scope) => {
+    const ptr = scope.allocRectF();
+    if (!mod.FPDF_GetPageBoundingBox(page, ptr)) {
+      const info = doc.pageInfo(pageIndex);
+      return { left: 0, bottom: 0, right: info.width, top: info.height };
+    }
+    return readRectF(mod, ptr);
+  });
 }
 
 /** The middle of a field, which is the safest point to aim a synthetic click at. */
@@ -431,7 +553,7 @@ export function drawnAppearanceStyle(
   doc: PdfDocument,
   field: FormFieldInfo,
 ): { font: string; size: number } | null {
-  return withFieldAnnot(doc, field.page, field.name, (annot) => {
+  return withFieldAnnot(doc, field.page, field.ref, (annot) => {
     const match = TF.exec(readAppearance(doc, annot));
     return match ? { font: match[1], size: Number(match[2]) } : null;
   });
@@ -448,7 +570,7 @@ function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
 
   // The sizes the file's own appearances use, recorded before the form
   // environment had a chance to generate any of its own.
-  const sizes: number[] = [...doc.originalApSizesOnPage(pageIndex)];
+  const sizes: number[] = [];
 
   // Plus anything a field declares outright.
   for (let i = 0; i < count; i++) {
@@ -456,8 +578,9 @@ function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
     if (!annot) continue;
     try {
       if (mod.FPDFAnnot_GetFormFieldType(form, annot) < 0) continue;
-      const match = TF.exec(readAnnotString(doc, annot, 'DA'));
-      const size = match ? Number(match[2]) : 0;
+      const original = doc.originalApSize(widgetRef(doc, annot));
+      if (original !== null && original > 0) sizes.push(original);
+      const size = declaredSize(doc, annot);
       if (size > 0) sizes.push(size);
     } finally {
       mod.FPDFPage_CloseAnnot(annot);
@@ -473,10 +596,40 @@ function median(values: number[]): number {
   return sorted.length % 2 === 0 ? (sorted[middle - 1] + sorted[middle]) / 2 : sorted[middle];
 }
 
-/** The type size a widget's `/DA` declares, or 0 when it says "auto". */
+/**
+ * The type size a widget's `/DA` declares, or 0 when it says "auto".
+ *
+ * Read through `FPDFAnnot_GetFontSize`, which resolves `/DA` the way PDFium
+ * will when it draws: the widget, then its parent fields, then `/AcroForm`.
+ * Reading the widget's own dictionary found nothing for a size set on the
+ * parent, called that "auto", and converted a perfectly well-specified field
+ * into page text. An auto size still reads as 0 through this call.
+ */
 function declaredSize(doc: PdfDocument, annot: number): number {
+  const { mod } = doc;
+  const form = doc.form;
+  if (form) {
+    const size = withScope(mod, (scope) => {
+      const ptr = scope.allocFloat();
+      return mod.FPDFAnnot_GetFontSize(form, annot, ptr)
+        ? (mod.pdfium.getValue(ptr, 'float') as number)
+        : null;
+    });
+    if (size !== null) return size;
+  }
   const match = TF.exec(readAnnotString(doc, annot, 'DA'));
   return match ? Number(match[2]) : 0;
+}
+
+/** The widget's `/MaxLen`, when it has one. Not inherited from a parent. */
+function readMaxLen(doc: PdfDocument, annot: number): number | undefined {
+  const { mod } = doc;
+  return withScope(mod, (scope) => {
+    const ptr = scope.allocFloat();
+    if (!mod.FPDFAnnot_GetNumberValue(annot, 'MaxLen', ptr)) return undefined;
+    const value = mod.pdfium.getValue(ptr, 'float') as number;
+    return value > 0 ? Math.round(value) : undefined;
+  });
 }
 
 /**
@@ -529,8 +682,7 @@ function pageTypeSizes(doc: PdfDocument, pageIndex: number): () => number[] {
 function drawnSize(
   doc: PdfDocument,
   annot: number,
-  annotIndex: number,
-  pageIndex: number,
+  ref: number,
   rect: Rect,
   siblings: () => number[],
 ): number {
@@ -544,7 +696,7 @@ function drawnSize(
   // field the file left without an appearance, PDFium has already generated
   // one at the auto size, and preserving that would preserve the very thing
   // being fixed.
-  const original = doc.originalApSize(pageIndex, annotIndex);
+  const original = doc.originalApSize(ref);
   if (original !== null && original > 0) return original;
 
   // 3. What the rest of the form uses.
@@ -567,12 +719,11 @@ function resolveTextSize(
   doc: PdfDocument,
   field: FormFieldInfo,
   annot: number,
-  annotIndex: number,
 ): { font: string; size: number; fill: string } | null {
   const da = readAnnotString(doc, annot, 'DA');
   const daTf = TF.exec(da);
 
-  if (daTf && Number(daTf[2]) > 0) return null;
+  if (declaredSize(doc, annot) > 0) return null;
 
   const ap = readAppearance(doc, annot);
   const apTf = TF.exec(ap);
@@ -585,7 +736,7 @@ function resolveTextSize(
 
   return {
     font,
-    size: drawnSize(doc, annot, annotIndex, field.page, field.rect, pageTypeSizes(doc, field.page)),
+    size: drawnSize(doc, annot, field.ref, field.rect, pageTypeSizes(doc, field.page)),
     fill,
   };
 }
@@ -600,8 +751,8 @@ function pinTextSize(doc: PdfDocument, field: FormFieldInfo): boolean {
   const { mod } = doc;
   let changed = false;
 
-  withFieldAnnot(doc, field.page, field.name, (annot, _form, annotIndex) => {
-    const style = resolveTextSize(doc, field, annot, annotIndex);
+  withFieldAnnot(doc, field.page, field.ref, (annot) => {
+    const style = resolveTextSize(doc, field, annot);
     if (!style) return;
 
     const da = `/${style.font} ${round2(style.size)} Tf ${style.fill}`;
@@ -627,8 +778,8 @@ function round2(value: number): number {
  */
 function effectiveFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
   const siblings = pageTypeSizes(doc, field.page);
-  return withFieldAnnot(doc, field.page, field.name, (annot, _form, annotIndex) =>
-    drawnSize(doc, annot, annotIndex, field.page, field.rect, siblings),
+  return withFieldAnnot(doc, field.page, field.ref, (annot) =>
+    drawnSize(doc, annot, field.ref, field.rect, siblings),
   );
 }
 
@@ -658,7 +809,7 @@ function appearanceTrustworthyAt(doc: PdfDocument, form: number, annot: number):
 
 /** `appearanceTrustworthyAt` for a named field, read fresh from the document. */
 export function appearanceIsTrustworthy(doc: PdfDocument, field: FormFieldInfo): boolean {
-  return withFieldAnnot(doc, field.page, field.name, (annot, form) =>
+  return withFieldAnnot(doc, field.page, field.ref, (annot, form) =>
     appearanceTrustworthyAt(doc, form, annot),
   );
 }
@@ -705,7 +856,7 @@ export async function convertFieldToText(
   const x = field.rect.left + FIELD_INSET;
   const baseline = field.rect.bottom + Math.max(1, (height - size) / 2 + size * 0.2);
 
-  const annotIndex = withFieldAnnot(doc, field.page, field.name, (_a, _f, index) => index);
+  const annotIndex = withFieldAnnot(doc, field.page, field.ref, (_a, _f, index) => index);
 
   // Remove the widget first: it holds the old value, and leaving it would
   // draw both at once.
@@ -769,6 +920,14 @@ export function setFormFieldText(doc: PdfDocument, field: FormFieldInfo, text: s
   mod.FORM_OnLButtonDown(form, page, 0, x, y);
   mod.FORM_OnLButtonUp(form, page, 0, x, y);
 
+  // A click on a combo box opens its drop-down, and while that is open the
+  // edit box ignores a replacement: it reports success and keeps the old
+  // value. Enter closes the list and leaves the edit box focused.
+  if (field.kind === 'choice') {
+    mod.FORM_OnKeyDown(form, page, KEY_ENTER, 0);
+    mod.FORM_OnKeyUp(form, page, KEY_ENTER, 0);
+  }
+
   if (!mod.FORM_SelectAllText(form, page)) {
     mod.FORM_ForceToKillFocus(form);
     throw new Error('That field could not be focused for editing.');
@@ -780,6 +939,41 @@ export function setFormFieldText(doc: PdfDocument, field: FormFieldInfo, text: s
 
   // Committing is what writes the value back and regenerates the appearance.
   mod.FORM_ForceToKillFocus(form);
+}
+
+/**
+ * Choose one of a combo box's options.
+ *
+ * Through `FORM_SetIndexSelected` on the focused field, committed by killing
+ * focus, so PDFium writes `/V` and rebuilds the appearance together. Typing
+ * into a fixed combo did nothing at all: the replace call has no edit box to
+ * act on, returned without error, and the value stayed as it was. An
+ * editable combo also takes free text, through the ordinary text path.
+ */
+export function setFormFieldChoice(doc: PdfDocument, field: FormFieldInfo, value: string): void {
+  const { mod } = doc;
+  const form = doc.form;
+  if (!form) throw new Error('This document has no interactive form.');
+  if (field.readOnly) throw new Error(field.notEditableReason ?? 'This field is read-only.');
+
+  const index = (field.options ?? []).indexOf(value);
+  if (index < 0) {
+    if (field.editableChoice) return setFormFieldText(doc, field, value);
+    throw new Error(`"${value}" is not one of the choices this field offers.`);
+  }
+
+  // Choosing rebuilds the appearance too, and a combo's `/DA` is often "auto"
+  // (Acrobat's default), which PDFium resolves to the box height. Pinning may
+  // reload the page, so the page handle is taken after it.
+  pinTextSize(doc, field);
+
+  const page = doc.page(field.page);
+  const { x, y } = centreOf(field);
+  mod.FORM_OnLButtonDown(form, page, 0, x, y);
+  mod.FORM_OnLButtonUp(form, page, 0, x, y);
+  const chosen = mod.FORM_SetIndexSelected(form, page, index, true);
+  mod.FORM_ForceToKillFocus(form);
+  if (!chosen) throw new Error('That choice could not be selected.');
 }
 
 /**

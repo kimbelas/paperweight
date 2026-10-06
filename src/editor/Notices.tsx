@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useMediaQuery } from './media';
 import { useEditor, type Notice } from './store';
 
 /**
@@ -38,15 +39,41 @@ export function Notices() {
   const notices = useEditor((s) => s.notices);
   const dismiss = useEditor((s) => s.dismissNotice);
 
+  const narrow = useMediaQuery('(max-width: 899px)');
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (notices.length === 0) setExpanded(false);
+  }, [notices.length]);
+
   if (notices.length === 0) return null;
+
+  // On a phone four cards cover the lower third of the page, which is where
+  // the rest of a form is. The newest shows; the others are one tap away.
+  const shown = narrow && !expanded ? notices.slice(-1) : notices.slice(-4);
+  const hidden = notices.length - shown.length;
 
   return (
     <div
-      className="pointer-events-none fixed bottom-12 right-4 z-40 flex w-80 flex-col gap-2"
+      className={`pointer-events-none fixed bottom-12 z-40 flex flex-col gap-2 ${narrow ? 'left-4 right-4' : 'right-4 w-80'}`}
       role="status"
       aria-live="polite"
     >
-      {notices.slice(-4).map((notice) => (
+      {narrow && hidden > 0 && !expanded && (
+        <button
+          type="button"
+          onClick={() => setExpanded(true)}
+          className="pointer-events-auto self-end rounded px-2 py-1 text-[11px]"
+          style={{
+            background: 'var(--app-panel)',
+            color: 'var(--app-text-dim)',
+            border: '1px solid var(--app-border)',
+          }}
+        >
+          +{hidden} more
+        </button>
+      )}
+      {shown.map((notice) => (
         <NoticeCard key={notice.id} notice={notice} onDismiss={dismiss} />
       ))}
     </div>

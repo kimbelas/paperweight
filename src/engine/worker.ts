@@ -36,7 +36,8 @@ const api = {
    * indistinguishable from a fix that does not work.
    */
   build: () => process.env.NEXT_PUBLIC_WORKER_STAMP ?? 'dev',
-  close: () => session.close(),
+  // Queued behind any edit still running; see `EditorSession.exclusive`.
+  close: () => session.exclusive(() => session.close()),
 
   // --- Reading -----------------------------------------------------------
 
@@ -84,14 +85,16 @@ const api = {
   replaceText: (pageIndex: number, lineId: string, text: string) =>
     session.replaceText(pageIndex, lineId, text),
   patchRegion: (request: PatchRegionRequest) => session.patchRegion(request),
-  setFormFieldValue: (pageIndex: number, name: string, value: string, width?: number) =>
-    session.setFormFieldValue(pageIndex, name, value, width),
-  toggleFormFieldValue: (pageIndex: number, name: string) =>
-    session.toggleFormFieldValue(pageIndex, name),
-  fitFormFieldWidth: (pageIndex: number, name: string) =>
-    session.fitFormFieldWidth(pageIndex, name),
-  measureFormField: (pageIndex: number, name: string, value: string) =>
-    session.measureFormField(pageIndex, name, value),
+  setFormFieldValue: (pageIndex: number, ref: number, value: string, width?: number) =>
+    session.setFormFieldValue(pageIndex, ref, value, width),
+  toggleFormFieldValue: (pageIndex: number, ref: number) =>
+    session.toggleFormFieldValue(pageIndex, ref),
+  fitFormFieldWidth: (pageIndex: number, ref: number) => session.fitFormFieldWidth(pageIndex, ref),
+  measureFormField: (pageIndex: number, ref: number, value: string) =>
+    session.measureFormField(pageIndex, ref, value),
+  moveFormField: (pageIndex: number, ref: number, dx: number, dy: number) =>
+    session.moveFormField(pageIndex, ref, dx, dy),
+  removeFormField: (pageIndex: number, ref: number) => session.removeFormField(pageIndex, ref),
   removeSignatureById: (id: string) => session.removeSignatureById(id),
   removeObjects: (pageIndex: number, paths: number[][]) => session.removeObjects(pageIndex, paths),
   removeAnnotationsAt: (pageIndex: number, indices: number[]) =>
@@ -113,13 +116,15 @@ const api = {
 
   // --- Output ------------------------------------------------------------
 
-  save: () => {
-    const bytes = session.save();
+  // Both wait for any edit still running, so a file is never written from a
+  // document halfway through a change.
+  save: async () => {
+    const bytes = await session.exclusive(() => session.save());
     return Comlink.transfer(bytes, [bytes.buffer]);
   },
 
-  extract: (indices: number[]) => {
-    const bytes = session.extract(indices);
+  extract: async (indices: number[]) => {
+    const bytes = await session.exclusive(() => session.extract(indices));
     return Comlink.transfer(bytes, [bytes.buffer]);
   },
 };

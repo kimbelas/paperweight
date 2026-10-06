@@ -7,12 +7,15 @@ import {
   appearanceIsTrustworthy,
   convertFieldToText,
   formFieldAt,
-  formFieldByName,
+  formFieldByRef,
   listFormFields,
   measureFieldFit,
+  moveFormField,
+  setFormFieldChoice,
   setFormFieldText,
   setFormFieldWidth,
   toggleFormField,
+  withAnnotIndexOf,
 } from './forms';
 import {
   applyPlacements,
@@ -71,17 +74,31 @@ export class EditorSession {
   private history = new History();
   private signatureScan: SignatureScan | null = null;
   private warnedAboutSignature = false;
+  /** The tail of the queue every mutation runs through; see `serial`. */
+  private queue: Promise<unknown> = Promise.resolve();
 
   /** Open a document, replacing any already open. */
-  async open(bytes: Uint8Array, password = ''): Promise<DocumentInfo> {
-    this.mod ??= await getModule();
-    this.closeDocument();
+  open(bytes: Uint8Array, password = ''): Promise<DocumentInfo> {
+    return this.serial(async () => {
+      this.mod ??= await getModule();
+      this.closeDocument();
 
-    this.doc = PdfDocument.open(this.mod, bytes, password);
-    this.history.clear();
-    this.signatureScan = null;
-    this.warnedAboutSignature = false;
-    return this.doc.info();
+      this.doc = PdfDocument.open(this.mod, bytes, password);
+      this.history.clear();
+      this.signatureScan = null;
+      this.warnedAboutSignature = false;
+      return this.doc.info();
+    });
+  }
+
+  /**
+   * Run `task` once every mutation already queued has finished.
+   *
+   * For the worker's calls that read or replace the whole document, such as
+   * saving or closing, which must not land between a mutation's steps.
+   */
+  exclusive<T>(task: () => T | Promise<T>): Promise<T> {
+    return this.serial(task);
   }
 
   /** True once a document is open. */
@@ -257,14 +274,20 @@ export class EditorSession {
    */
   async setFormFieldValue(
     pageIndex: number,
-    name: string,
+    ref: number,
     value: string,
     width?: number,
   ): Promise<CommitResult> {
     return this.commit(
       'Edit form field',
       async (doc) => {
-        const field = this.findField(doc, pageIndex, name);
+        const field = this.findField(doc, pageIndex, ref);
+
+        // A combo box is chosen, not typed into, and never drawn as page text.
+        if (field.kind === 'choice') {
+          setFormFieldChoice(doc, field, value);
+          return [];
+        }
 
         // When the document does not say how the field should look, PDFium's
         // rebuilt appearance will not match it -- an auto size resolved to the
@@ -277,7 +300,10 @@ export class EditorSession {
         // a field either -- see `FormFieldInfo.clips` -- so a width arriving
         // on this path would be a caller asking for something the outcome
         // makes meaningless, not a width being quietly lost.
-        if (!appearanceIsTrustworthy(doc, field)) {
+        //
+        // A password field stays a field whatever its size says: converting it
+        // would draw the secret into the page as readable text.
+        if (!field.password && !appearanceIsTrustworthy(doc, field)) {
           const conversion = await convertFieldToText(doc, field, value);
           return this.conversionBadges(field, conversion);
         }
@@ -288,10 +314,10 @@ export class EditorSession {
           setFormFieldWidth(doc, field, width);
         }
 
-        const resized = this.findField(doc, pageIndex, name);
+        const resized = this.findField(doc, pageIndex, ref);
         setFormFieldText(doc, resized, value);
 
-        return this.fitBadges(doc, this.findField(doc, pageIndex, name), value);
+        return this.fitBadges(doc, this.findField(doc, pageIndex, ref), value);
       },
       false,
       [pageIndex],
@@ -299,11 +325,11 @@ export class EditorSession {
   }
 
   /** Widen a field to hold its current value, and report the new width. */
-  async fitFormFieldWidth(pageIndex: number, name: string): Promise<CommitResult> {
+  async fitFormFieldWidth(pageIndex: number, ref: number): Promise<CommitResult> {
     return this.commit(
       'Widen form field',
       async (doc) => {
-        const field = this.findField(doc, pageIndex, name);
+        const field = this.findField(doc, pageIndex, ref);
         const fit = await measureFieldFit(doc, field, field.value);
         const applied = setFormFieldWidth(doc, field, fit.requiredWidth);
 
@@ -323,10 +349,32 @@ export class EditorSession {
     );
   }
 
+  /**
+   * Move a field by a delta in points.
+   *
+   * Repainted, not regenerated, like every other form edit: the change is to
+   * the widget's rectangle, and nothing in the content stream moved.
+   */
+  moveFormField(pageIndex: number, ref: number, dx: number, dy: number): Promise<CommitResult> {
+    return this.commitSync(
+      'Move form field',
+      (doc) => {
+        moveFormField(doc, this.findField(doc, pageIndex, ref), dx, dy);
+        return [];
+      },
+      false,
+      [pageIndex],
+    );
+  }
+
   /** Ask whether a value fits a field, without changing anything. */
-  async measureFormField(pageIndex: number, name: string, value: string): Promise<FormFieldFit> {
-    const doc = this.require();
-    return measureFieldFit(doc, this.findField(doc, pageIndex, name), value);
+  measureFormField(pageIndex: number, ref: number, value: string): Promise<FormFieldFit> {
+    // Queued: the measurement awaits, and a reload in between would leave it
+    // reading a closed document.
+    return this.serial(() => {
+      const doc = this.require();
+      return measureFieldFit(doc, this.findField(doc, pageIndex, ref), value);
+    });
   }
 
   /**
@@ -375,18 +423,18 @@ export class EditorSession {
     return [
       {
         kind: 'text-overflows',
-        message: `That value is wider than ${formFieldPhrase(field)}, so it will be cut off when printed. Drag the field's right edge to widen it, or use Widen to fit.`,
+        message: `That value is wider than ${formFieldPhrase(field)}, so it will be cut off when printed. Use Widen to fit, or shorten it.`,
         page: field.page,
       },
     ];
   }
 
   /** Tick or untick a checkbox, or select a radio button. */
-  toggleFormFieldValue(pageIndex: number, name: string): CommitResult {
+  toggleFormFieldValue(pageIndex: number, ref: number): Promise<CommitResult> {
     return this.commitSync(
       'Tick form field',
       (doc) => {
-        const field = this.findField(doc, pageIndex, name);
+        const field = this.findField(doc, pageIndex, ref);
         toggleFormField(doc, field);
         return [];
       },
@@ -395,25 +443,47 @@ export class EditorSession {
     );
   }
 
-  removeSignatureById(id: string): CommitResult {
-    const candidate = this.signatures().candidates.find((c) => c.id === id);
-    if (!candidate) throw new Error('That signature is no longer in the document.');
-
-    // A signature that is an annotation leaves no mark on the content stream,
-    // so the page is repainted rather than regenerated. An image signature
-    // marks its own page dirty; the union covers both.
+  /**
+   * Remove a field's widget from the page and from the form's field tree.
+   *
+   * Resolved by object number at the moment of removal, so a stale rectangle
+   * or a renumbered annotation list cannot remove the wrong widget.
+   */
+  removeFormField(pageIndex: number, ref: number): Promise<CommitResult> {
     return this.commitSync(
-      'Remove signature',
+      'Delete form field',
       (doc) => {
-        const result = removeSignature(doc, candidate);
-        return result.badges;
+        const index = withAnnotIndexOf(doc, pageIndex, ref);
+        if (removeAnnotations(doc, pageIndex, [index]) === 0) {
+          throw new Error('Nothing was removed.');
+        }
+        return [];
       },
       false,
-      [candidate.page],
+      [pageIndex],
     );
   }
 
-  removeObjects(pageIndex: number, paths: number[][]): CommitResult {
+  removeSignatureById(id: string): Promise<CommitResult> {
+    // Looked up in the queue, so an edit still running cannot change the
+    // scan between the lookup and the removal.
+    return this.serial(() => {
+      const candidate = this.signatures().candidates.find((c) => c.id === id);
+      if (!candidate) throw new Error('That signature is no longer in the document.');
+
+      // A signature that is an annotation leaves no mark on the content
+      // stream, so the page is repainted rather than regenerated. An image
+      // signature marks its own page dirty; the union covers both.
+      return this.commitNow(
+        'Remove signature',
+        (doc) => removeSignature(doc, candidate).badges,
+        false,
+        [candidate.page],
+      );
+    });
+  }
+
+  removeObjects(pageIndex: number, paths: number[][]): Promise<CommitResult> {
     return this.commitSync('Delete', (doc) => {
       const removed = removeObjectsByPath(doc, pageIndex, paths);
       if (removed === 0) throw new Error('Nothing was removed.');
@@ -435,7 +505,7 @@ export class EditorSession {
    * One user action, so one undo step, however many objects a dragged line
    * turns out to consist of.
    */
-  moveObjects(pageIndex: number, paths: number[][], dx: number, dy: number): CommitResult {
+  moveObjects(pageIndex: number, paths: number[][], dx: number, dy: number): Promise<CommitResult> {
     return this.commitSync('Move', (doc) => {
       const result = moveObjects(doc, pageIndex, paths, dx, dy);
       if (result.moved === 0 && result.badges.length === 0) {
@@ -445,7 +515,7 @@ export class EditorSession {
     });
   }
 
-  removeAnnotationsAt(pageIndex: number, indices: number[]): CommitResult {
+  removeAnnotationsAt(pageIndex: number, indices: number[]): Promise<CommitResult> {
     // An annotation is not page content, so nothing is regenerated and the
     // page is listed for repainting instead.
     return this.commitSync(
@@ -470,14 +540,14 @@ export class EditorSession {
     });
   }
 
-  rotate(pageIndex: number, quarterTurns: number): CommitResult {
+  rotate(pageIndex: number, quarterTurns: number): Promise<CommitResult> {
     return this.commitSync('Rotate page', (doc) => {
       rotatePage(doc, pageIndex, quarterTurns);
       return [];
     });
   }
 
-  deletePages(indices: number[]): CommitResult {
+  deletePages(indices: number[]): Promise<CommitResult> {
     return this.commitSync(
       'Delete pages',
       (doc) => {
@@ -488,7 +558,7 @@ export class EditorSession {
     );
   }
 
-  movePages(indices: number[], destination: number): CommitResult {
+  movePages(indices: number[], destination: number): Promise<CommitResult> {
     return this.commitSync(
       'Reorder pages',
       (doc) => {
@@ -499,7 +569,7 @@ export class EditorSession {
     );
   }
 
-  insertBlankPage(atIndex: number): CommitResult {
+  insertBlankPage(atIndex: number): Promise<CommitResult> {
     return this.commitSync(
       'Insert page',
       (doc) => {
@@ -517,28 +587,34 @@ export class EditorSession {
 
   // --- History -----------------------------------------------------------
 
-  async undo(): Promise<CommitResult | null> {
-    const doc = this.require();
-    if (!this.history.canUndo) return null;
+  undo(): Promise<CommitResult | null> {
+    // Queued behind any edit still running, so an Undo pressed straight after
+    // an edit undoes that edit rather than finding nothing to undo yet.
+    return this.serial(async () => {
+      const doc = this.require();
+      if (!this.history.canUndo) return null;
 
-    const current = doc.save();
-    const snapshot = this.history.undo('Redo', current);
-    if (!snapshot) return null;
+      const current = doc.save();
+      const snapshot = this.history.undo('Redo', current);
+      if (!snapshot) return null;
 
-    await this.reopen(snapshot.bytes);
-    return { changedPages: allPages(this.require()), badges: [] };
+      await this.reopen(snapshot.bytes);
+      return { changedPages: allPages(this.require()), badges: [] };
+    });
   }
 
-  async redo(): Promise<CommitResult | null> {
-    const doc = this.require();
-    if (!this.history.canRedo) return null;
+  redo(): Promise<CommitResult | null> {
+    return this.serial(async () => {
+      const doc = this.require();
+      if (!this.history.canRedo) return null;
 
-    const current = doc.save();
-    const snapshot = this.history.redo('Undo', current);
-    if (!snapshot) return null;
+      const current = doc.save();
+      const snapshot = this.history.redo('Undo', current);
+      if (!snapshot) return null;
 
-    await this.reopen(snapshot.bytes);
-    return { changedPages: allPages(this.require()), badges: [] };
+      await this.reopen(snapshot.bytes);
+      return { changedPages: allPages(this.require()), badges: [] };
+    });
   }
 
   historyState(): {
@@ -579,15 +655,15 @@ export class EditorSession {
   }
 
   /**
-   * Resolve a field by name, at the moment of the mutation.
+   * Resolve a field by widget object number, at the moment of the mutation.
    *
-   * Looked up again rather than trusting the `FormFieldInfo` the UI is
-   * holding: undo reopens the document from bytes, so any handle or index
-   * captured when the editor opened would be stale by now.
+   * Looked up again rather than trusting the `FormFieldInfo` the UI holds:
+   * undo reopens the document from bytes, so a handle or index captured when
+   * the editor opened would be stale by now. The object number is not.
    */
-  private findField(doc: PdfDocument, pageIndex: number, name: string): FormFieldInfo {
-    const field = formFieldByName(doc, pageIndex, name);
-    if (!field) throw new Error(`The field "${name}" is no longer on this page.`);
+  private findField(doc: PdfDocument, pageIndex: number, ref: number): FormFieldInfo {
+    const field = formFieldByRef(doc, pageIndex, ref);
+    if (!field) throw new Error('That field is no longer on this page.');
     return field;
   }
 
@@ -603,11 +679,57 @@ export class EditorSession {
    * user saw. `flushDirty` regenerates only the pages the mutation marked,
    * which is what keeps an edit on page one from rewriting page fifty.
    */
-  private async commit(
+  private commit(
     label: string,
     mutate: (doc: PdfDocument) => Promise<Badge[]>,
     structural = false,
     repaint: number[] = [],
+  ): Promise<CommitResult> {
+    return this.serial(() => this.commitNow(label, mutate, structural, repaint));
+  }
+
+  /**
+   * As `commit`, for a mutation that does not await. Still queued.
+   *
+   * `repaint` names pages whose bitmap is stale even though their content
+   * stream was not touched. Form fields are the case that needs it: the value
+   * changed and the page looks different, but the change is in the form, so
+   * there is nothing to regenerate and `flushDirty` rightly reports nothing.
+   * Without this the edit would be invisible until something else forced a
+   * redraw.
+   */
+  private commitSync(
+    label: string,
+    mutate: (doc: PdfDocument) => Badge[],
+    structural = false,
+    repaint: number[] = [],
+  ): Promise<CommitResult> {
+    return this.serial(() => this.commitNow(label, mutate, structural, repaint));
+  }
+
+  /**
+   * Run tasks one at a time, in the order they arrive.
+   *
+   * A commit awaits in the middle (loading a font, measuring a value), and the
+   * worker answers the next message while it does. The interface does not
+   * wait for one edit before sending the next: on iOS the next field's tap
+   * commits the last, and Undo can follow at once. Without the queue a second
+   * call would snapshot, save or reopen a document the first had half
+   * changed, or had just closed. A task that fails rejects its own caller and
+   * nothing else, so the next one still runs.
+   */
+  private serial<T>(task: () => T | Promise<T>): Promise<T> {
+    const run = this.queue.then(task);
+    this.queue = run.catch(() => undefined);
+    return run;
+  }
+
+  /** The body of every commit. Only ever called from inside `serial`. */
+  private async commitNow(
+    label: string,
+    mutate: (doc: PdfDocument) => Badge[] | Promise<Badge[]>,
+    structural: boolean,
+    repaint: number[],
   ): Promise<CommitResult> {
     const doc = this.require();
     const before = doc.save();
@@ -626,45 +748,6 @@ export class EditorSession {
     const changedPages = doc.flushDirty();
     // `repaint` covers changes that alter how a page looks without touching
     // its content stream; see `commitSync`.
-    snapshot.affectedPages = [...new Set([...changedPages, ...repaint])].sort((a, b) => a - b);
-    this.signatureScan = null;
-
-    return {
-      changedPages: structural ? allPages(doc) : snapshot.affectedPages,
-      badges: [...badges, ...this.signatureWarning(doc)],
-      undoId: snapshot.id,
-    };
-  }
-
-  /**
-   * As `commit`, synchronously.
-   *
-   * `repaint` names pages whose bitmap is stale even though their content
-   * stream was not touched. Form fields are the case that needs it: the value
-   * changed and the page looks different, but the change is in the form, so
-   * there is nothing to regenerate and `flushDirty` rightly reports nothing.
-   * Without this the edit would be invisible until something else forced a
-   * redraw.
-   */
-  private commitSync(
-    label: string,
-    mutate: (doc: PdfDocument) => Badge[],
-    structural = false,
-    repaint: number[] = [],
-  ): CommitResult {
-    const doc = this.require();
-    const before = doc.save();
-
-    let badges: Badge[];
-    try {
-      badges = mutate(doc);
-    } catch (error) {
-      this.reopenSync(before);
-      throw error;
-    }
-
-    const snapshot = this.history.push(label, before);
-    const changedPages = doc.flushDirty();
     snapshot.affectedPages = [...new Set([...changedPages, ...repaint])].sort((a, b) => a - b);
     this.signatureScan = null;
 
@@ -707,8 +790,11 @@ export class EditorSession {
 
   private reopenSync(bytes: Uint8Array): void {
     if (!this.mod) throw new Error('The PDF engine is not loaded.');
+    // The sizes recorded at the first open of this file, not sizes read off
+    // bytes PDFium has already regenerated: see `PdfDocument.appearanceSizes`.
+    const sizes = this.doc?.appearanceSizes;
     this.closeDocument();
-    this.doc = PdfDocument.open(this.mod, bytes);
+    this.doc = PdfDocument.open(this.mod, bytes, '', sizes);
     this.signatureScan = null;
   }
 }

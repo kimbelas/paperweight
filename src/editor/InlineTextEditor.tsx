@@ -1,8 +1,10 @@
 'use client';
 
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import type { Rect, Rgba } from '@/engine/types';
 import { useMediaQuery } from './media';
+import { useOnScreen } from './onscreen';
+import { pressHandlers } from './press';
 import { pdfRectToCss, type PageTransform } from './transform';
 
 /**
@@ -85,6 +87,10 @@ interface InlineTextEditorProps {
   widenable?: boolean;
   /** Widest the box may become, in points. Stops it running off the page. */
   maxWidth?: number;
+  /** Mask the value as it is typed. */
+  password?: boolean;
+  /** The most characters the field accepts. */
+  maxLength?: number;
   /** The committed width, in points, when it was changed. */
   onCommit: (text: string, width?: number) => void | Promise<void>;
   onCancel: () => void;
@@ -104,6 +110,8 @@ export function InlineTextEditor({
   zoom,
   widenable,
   maxWidth,
+  password,
+  maxLength,
   onCommit,
   onCancel,
 }: InlineTextEditorProps) {
@@ -122,7 +130,7 @@ export function InlineTextEditor({
     const input = inputRef.current;
     if (!input) return;
     input.focus();
-    input.select();
+    input.setSelectionRange(0, input.value.length);
   }, []);
 
   const shownWidth = width ?? originalWidth;
@@ -180,8 +188,19 @@ export function InlineTextEditor({
 
   const widthChanged = width !== null && Math.round(width) !== Math.round(originalWidth);
 
+  /** Set once the edit is committed or cancelled, so it is never done twice. */
+  const settled = useRef(false);
+  const latest = useRef({ value, width, widthChanged, onCommit, text });
+  latest.current = { value, width, widthChanged, onCommit, text };
+
+  const cancel = () => {
+    settled.current = true;
+    onCancel();
+  };
+
   const submit = async () => {
-    if (busy) return;
+    if (busy || settled.current) return;
+    settled.current = true;
     if (value === text && !widthChanged) {
       onCancel();
       return;
@@ -193,6 +212,25 @@ export function InlineTextEditor({
       setBusy(false);
     }
   };
+
+  // iOS does not blur an input when the next tap lands on something that
+  // cannot take focus, so tapping another field replaced this editor without
+  // its blur ever firing and the typed value was lost. Commit on the way out.
+  useEffect(
+    () => () => {
+      const l = latest.current;
+      if (settled.current) return;
+      if (l.value === l.text && !l.widthChanged) return;
+      settled.current = true;
+      void l.onCommit(l.value, l.widthChanged ? l.width! : undefined);
+    },
+    [],
+  );
+
+  const chipRef = useRef<HTMLDivElement | null>(null);
+  const chip = useOnScreen(chipRef, [value, busy, clipped, coarse, box.left, box.width]);
+  const rowRef = useRef<HTMLDivElement | null>(null);
+  const row = useOnScreen(rowRef, [value, busy, clipped, chip.below, box.left, box.width]);
 
   /** The editor's own height: the line's, plus whatever larger type needs. */
   const height = box.height + grow + pad * 2;
@@ -253,18 +291,30 @@ export function InlineTextEditor({
           lineHeight: `${height}px`,
           opacity: busy ? 0.5 : 1,
         }}
+        type={password ? 'password' : 'text'}
+        maxLength={maxLength}
         value={value}
         disabled={busy}
         spellCheck={false}
+        autoCorrect="off"
+        autoCapitalize="off"
+        enterKeyHint="done"
         aria-label="Edit this line of text"
         onChange={(event) => setValue(event.target.value)}
         onKeyDown={(event) => {
-          if (event.key === 'Enter') {
+          // The Enter that confirms an IME composition must not commit. Most
+          // engines flag it with `isComposing`; WebKit ends the composition
+          // before this keydown, so there it is only `keyCode` 229 that says so.
+          if (
+            event.key === 'Enter' &&
+            !event.nativeEvent.isComposing &&
+            event.nativeEvent.keyCode !== 229
+          ) {
             event.preventDefault();
             void submit();
           } else if (event.key === 'Escape') {
             event.preventDefault();
-            onCancel();
+            cancel();
           }
           // Arrow keys and Home/End must reach the input rather than reaching
           // the shell's shortcuts or scrolling the page behind it.
@@ -277,53 +327,113 @@ export function InlineTextEditor({
         Anchored above the box rather than at a fixed offset, and allowed to
         wrap: on a phone the hint is wider than the screen, and held on one
         line it ran off the right-hand edge with the half that says what Enter
-        does out of sight.
+        does out of sight. `useOnScreen` shifts it back in from either edge
+        and flips it below the box when there is no room above.
+
+        On touch it drops the Enter hint, since a soft keyboard has its own
+        Done key, and carries Done and Cancel buttons instead: a phone has no
+        Escape, and tapping away was the only other way out.
       */}
       <div
+        ref={chipRef}
         className="absolute flex items-center gap-1.5 rounded px-1.5 py-0.5 text-[11px]"
         style={{
-          bottom: '100%',
+          ...(chip.below ? { top: '100%', marginTop: 4 } : { bottom: '100%', marginBottom: 4 }),
           left: 0,
-          marginBottom: 4,
-          maxWidth: 'min(80vw, 460px)',
+          transform: chip.dx ? `translateX(${chip.dx}px)` : undefined,
+          maxWidth: 'min(calc(100vw - 16px), 460px)',
           background: 'var(--app-accent)',
           color: '#fff',
         }}
       >
         <span className="pointer-events-none">
-          {busy ? 'Applying…' : widthChanged ? `${Math.round(shownWidth)} pt wide · ${hint}` : hint}
+          {busy
+            ? 'Applying…'
+            : coarse
+              ? widthChanged
+                ? `${Math.round(shownWidth)} pt wide`
+                : ''
+              : widthChanged
+                ? `${Math.round(shownWidth)} pt wide · ${hint}`
+                : hint}
         </span>
 
         {widenable && clipped && !busy && (
           <button
             type="button"
-            // `preventDefault` on pointer down is load-bearing: without it the
-            // press moves focus out of the input, the blur handler commits,
-            // and the editor closes before the width is ever applied.
-            onPointerDown={(event) => event.preventDefault()}
-            onClick={fitToText}
-            className="rounded px-1 font-semibold underline"
-            style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', cursor: 'pointer' }}
+            {...pressHandlers(fitToText)}
+            className="rounded px-2 font-semibold underline"
+            style={{
+              background: 'rgba(255,255,255,0.18)',
+              color: '#fff',
+              cursor: 'pointer',
+              minHeight: coarse ? 44 : undefined,
+            }}
             title="Widen the field so the whole value is drawn"
           >
             Widen to fit
           </button>
         )}
+
+        {coarse && !busy && (
+          <>
+            <button
+              type="button"
+              {...pressHandlers(() => void submit())}
+              className="rounded px-3 font-semibold"
+              style={{ background: '#fff', color: 'var(--app-accent)', minHeight: 44 }}
+            >
+              Done
+            </button>
+            <button
+              type="button"
+              {...pressHandlers(cancel)}
+              className="rounded px-3"
+              style={{ background: 'rgba(255,255,255,0.18)', color: '#fff', minHeight: 44 }}
+            >
+              Cancel
+            </button>
+          </>
+        )}
       </div>
 
-      {widenable && clipped && !busy && (
+      {/*
+        The cut-off warning and the length counter share one row on the side
+        the chip is not on, so a chip flipped below the box never lands on
+        either of them, and they never land on each other.
+
+        Sized to its own text rather than to the box: left to shrink to fit,
+        an absolute row is only as wide as the field, and on a phone the
+        warning became a narrow column five lines tall over the form. Shifted
+        back on screen the same way the chip is, since a field on the right
+        half of a phone otherwise pushes it off the edge.
+      */}
+      {((widenable && clipped && !busy) ||
+        (maxLength !== undefined && maxLength - value.length <= 5)) && (
         <div
-          className="pointer-events-none absolute rounded px-1.5 py-0.5 text-[11px]"
+          ref={rowRef}
+          className="pointer-events-none absolute flex items-start gap-1.5 text-[11px]"
           style={{
-            top: '100%',
+            ...(chip.below ? { bottom: '100%', marginBottom: 4 } : { top: '100%', marginTop: 4 }),
             left: 0,
-            marginTop: 4,
-            maxWidth: 'min(80vw, 460px)',
-            background: '#9a3412',
-            color: '#fff',
+            width: 'max-content',
+            transform: row.dx ? `translateX(${row.dx}px)` : undefined,
+            maxWidth: 'min(calc(100vw - 16px), 460px)',
           }}
         >
-          Wider than the field — this will be cut off when printed
+          {widenable && clipped && !busy && (
+            <div className="rounded px-1.5 py-0.5" style={{ background: '#9a3412', color: '#fff' }}>
+              Wider than the field: this will be cut off when printed
+            </div>
+          )}
+          {maxLength !== undefined && maxLength - value.length <= 5 && (
+            <div
+              className="shrink-0 rounded px-1.5 py-0.5"
+              style={{ background: 'var(--app-panel)', color: 'var(--app-text-dim)' }}
+            >
+              {value.length}/{maxLength}
+            </div>
+          )}
         </div>
       )}
     </div>

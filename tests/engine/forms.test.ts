@@ -9,6 +9,7 @@ import {
   formFieldByName,
   listFormFields,
   measureFieldFit,
+  moveFormField,
   setFormFieldText,
   setFormFieldWidth,
   toggleFormField,
@@ -256,6 +257,58 @@ describe('editing a form field', () => {
     });
 
     expect(width).toBeLessThanOrEqual(612);
+  });
+
+  it('moves a field, keeping its size and its value', async () => {
+    const { before, after, saved } = await withFixture('acroform-sig-field.pdf', (doc) => {
+      const before = formFieldByName(doc, 0, 'FullName')!;
+      moveFormField(doc, before, 30, -40);
+      return { before, after: formFieldByName(doc, 0, 'FullName')!, saved: doc.save() };
+    });
+
+    expect(after.rect.left).toBeCloseTo(before.rect.left + 30, 1);
+    expect(after.rect.bottom).toBeCloseTo(before.rect.bottom - 40, 1);
+    expect(after.rect.right - after.rect.left).toBeCloseTo(before.rect.right - before.rect.left, 1);
+    expect(after.rect.top - after.rect.bottom).toBeCloseTo(before.rect.top - before.rect.bottom, 1);
+    expect(after.value).toBe(before.value);
+
+    // In the file, not only in memory.
+    await withBytes(saved, (doc) => {
+      const reopened = formFieldByName(doc, 0, 'FullName')!;
+      expect(reopened.rect.left).toBeCloseTo(before.rect.left + 30, 1);
+      expect(reopened.rect.bottom).toBeCloseTo(before.rect.bottom - 40, 1);
+      expect(reopened.value).toBe(before.value);
+    });
+  });
+
+  it('draws the value where the field was moved to', async () => {
+    // The appearance is drawn relative to the box, so it has to travel with
+    // it with no rebuild. If the form environment kept the old geometry the
+    // value would still be drawn at the old place.
+    const { before, after, to } = await withFixture('acroform-sig-field.pdf', (doc) => {
+      const field = formFieldByName(doc, 0, 'FullName')!;
+      const first = renderPage(doc, 0, { scale: 1, annotations: true });
+      const to = moveFormField(doc, field, 0, -100);
+      const second = renderPage(doc, 0, { scale: 1, annotations: true });
+      return { before: first, after: second, to };
+    });
+
+    expect(darkInRect(before.data, before.width, 792, FIELD)).toBeGreaterThan(0);
+    expect(darkInRect(after.data, after.width, 792, to)).toBeGreaterThan(0);
+    expect(darkInRect(after.data, after.width, 792, FIELD)).toBeLessThan(
+      darkInRect(before.data, before.width, 792, FIELD),
+    );
+  });
+
+  it('never moves a field off the page', async () => {
+    const rect = await withFixture('acroform-sig-field.pdf', (doc) =>
+      moveFormField(doc, formFieldByName(doc, 0, 'FullName')!, 5000, -5000),
+    );
+
+    expect(rect.left).toBeGreaterThanOrEqual(0);
+    expect(rect.right).toBeLessThanOrEqual(612);
+    expect(rect.bottom).toBeGreaterThanOrEqual(0);
+    expect(rect.top).toBeLessThanOrEqual(792);
   });
 
   it('draws more of a long value once the field is widened', async () => {

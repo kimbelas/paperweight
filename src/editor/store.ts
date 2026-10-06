@@ -1,8 +1,10 @@
 import { create } from 'zustand';
+import { formFieldPhrase } from '@/engine/form-label';
 import type { MarkShape, MarkWeight } from '@/engine/marks';
 import type {
   Badge,
   DocumentInfo,
+  FormFieldInfo,
   Placement,
   Rect,
   Rgba,
@@ -54,6 +56,26 @@ export interface Selection {
   type?: number;
   /** Its bounds in PDF points, for the properties panel. */
   bounds?: Rect;
+  /** Set when a form field is selected; `paths` is then empty. */
+  field?: FormFieldInfo;
+}
+
+/**
+ * A form field as a selection.
+ *
+ * No object paths — a widget is an annotation, not page content — and the
+ * outline is the widget's own box. `paths` stays an empty array rather than
+ * going optional, so everything that iterates it keeps working unchanged.
+ */
+export function fieldSelection(field: FormFieldInfo): Selection {
+  const phrase = formFieldPhrase(field);
+  return {
+    page: field.page,
+    paths: [],
+    label: phrase.charAt(0).toUpperCase() + phrase.slice(1),
+    bounds: field.rect,
+    field,
+  };
 }
 
 export interface SavedSignature {

@@ -159,6 +159,61 @@ test('ticking a box toggles it rather than opening an editor', async ({ page }) 
 });
 
 /**
+ * Moving a field.
+ *
+ * In the Select tool a field is selected like anything else on the page, and
+ * the outline is the drag handle. Editing is a second click away, and the
+ * outline says so — the first click must never look like nothing happened.
+ */
+test('selects a field with the Select tool and drags it into place', async ({ page }) => {
+  await openApp(page);
+  await openForm(page);
+
+  const before = await inkIn(page, SURNAME_RECT);
+  expect(before).toBeGreaterThan(0);
+
+  // Select is the default tool; armed explicitly so the test says what it means.
+  await page.getByRole('button', { name: 'Select' }).click();
+  await clickPdf(page, SURNAME_VALUE.x, SURNAME_VALUE.y);
+
+  const outline = page.locator('[role="group"][aria-label^="Selected:"]');
+  await expect(outline).toBeVisible();
+  await expect(outline).toHaveAttribute('aria-label', /Surname/);
+  await expect(page.getByText('Click again to edit')).toBeVisible();
+  // Not an editor: that is what the second click is for.
+  await expect(page.getByRole('textbox', { name: /edit this line of text/i })).toHaveCount(0);
+
+  const box = (await outline.boundingBox())!;
+  const canvas = (await page.locator('canvas[aria-label="Page 1"]').boundingBox())!;
+  const dropCss = 60;
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
+  await page.mouse.down();
+  await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2 + dropCss, { steps: 10 });
+  await expect(page.getByText('Release to place')).toBeVisible();
+  await page.mouse.up();
+
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeEnabled({ timeout: 20_000 });
+
+  // The value is drawn where the field was dropped, straight down the page,
+  // and no longer where it was. Converted through the displayed zoom.
+  const dropPt = dropCss / (canvas.height / 792);
+  const moved = {
+    left: SURNAME_RECT.left,
+    right: SURNAME_RECT.right,
+    bottom: SURNAME_RECT.bottom - dropPt,
+    top: SURNAME_RECT.top - dropPt,
+  };
+  await expect.poll(() => inkIn(page, moved), { timeout: 30_000 }).toBeGreaterThan(0);
+  expect(await inkIn(page, SURNAME_RECT)).toBeLessThan(before);
+
+  // The selection followed the field, so one more click on it opens the value.
+  await clickPdf(page, SURNAME_VALUE.x, SURNAME_VALUE.y - dropPt);
+  const input = page.getByRole('textbox', { name: /edit this line of text/i });
+  await expect(input).toBeVisible({ timeout: 20_000 });
+  await expect(input).toHaveValue('DOE');
+});
+
+/**
  * Widening a field.
  *
  * A field clips its appearance to its own rectangle, so a value wider than
@@ -527,10 +582,16 @@ test.describe('on a phone', () => {
 
     const canvas = page.locator('canvas[aria-label="Page 1"]');
     const box = (await canvas.boundingBox())!;
-    await page.touchscreen.tap(
-      box.x + SURNAME_VALUE.x * (box.width / 612),
-      box.y + (792 - SURNAME_VALUE.y) * (box.height / 792),
-    );
+    const at = {
+      x: box.x + SURNAME_VALUE.x * (box.width / 612),
+      y: box.y + (792 - SURNAME_VALUE.y) * (box.height / 792),
+    };
+
+    // The Select tool is armed on opening: the first tap selects the field
+    // and the outline says a second one edits it.
+    await page.touchscreen.tap(at.x, at.y);
+    await expect(page.locator('[role="group"][aria-label^="Selected:"]')).toBeVisible();
+    await page.touchscreen.tap(at.x, at.y);
 
     const input = page.getByRole('textbox', { name: /edit this line of text/i });
     await expect(input).toBeVisible({ timeout: 20_000 });
@@ -552,16 +613,15 @@ test.describe('on a phone', () => {
     expect(shown.heightPx).toBeGreaterThan(16);
     expect(shown.focused).toBe(true);
 
-    // Typing still reaches it, and the hint stays on the screen rather than
-    // running off the right-hand edge with half of it out of sight.
+    // Typing still reaches it, and the chip stays on the screen rather than
+    // running off the right-hand edge with half of it out of sight. On touch
+    // it carries Done and Cancel in place of the Enter hint.
     await input.fill('DOE-WHITFIELD');
     await expect(input).toHaveValue('DOE-WHITFIELD');
 
     const overhang = await page.evaluate(() => {
-      const hint = [...document.querySelectorAll('div')].find((d) =>
-        d.textContent?.startsWith('Enter to update'),
-      )!;
-      return hint.getBoundingClientRect().right - window.innerWidth;
+      const done = [...document.querySelectorAll('button')].find((b) => b.textContent === 'Done')!;
+      return done.closest('div')!.getBoundingClientRect().right - window.innerWidth;
     });
     expect(overhang).toBeLessThanOrEqual(0);
 
@@ -571,4 +631,35 @@ test.describe('on a phone', () => {
     );
     expect(sideways).toBe(0);
   });
+});
+
+test('arrow keys on a combo do not commit each step; Enter does', async ({ page }) => {
+  await openApp(page);
+  const chooser = page.waitForEvent('filechooser');
+  await page.getByRole('button', { name: /choose a pdf/i }).click();
+  await (await chooser).setFiles(join(FIXTURES, 'form-kinds.pdf'));
+  await expect(page.locator('canvas[aria-label="Page 1"]')).toBeVisible({ timeout: 45_000 });
+  await expect(page.getByText('Rendering…')).toHaveCount(0, { timeout: 30_000 });
+
+  await page.getByRole('button', { name: /edit text/i }).click();
+  await clickPdf(page, 280, 669);
+  const select = page.getByRole('combobox', { name: /choose/i });
+  await expect(select).toBeVisible({ timeout: 20_000 });
+
+  // Stepping through the options with the keyboard is looking, not choosing:
+  // each step used to be its own commit and its own undo entry.
+  await select.press('ArrowDown');
+  await page.waitForTimeout(600);
+  await expect(page.getByRole('button', { name: 'Undo' })).toBeDisabled();
+  await expect(select).toBeVisible();
+
+  // Enter commits whatever the select holds. Firefox opens its list on focus
+  // and that list does not take synthetic arrow keys, so there the value
+  // never moved and Enter rightly closes without an edit.
+  const chosen = await select.inputValue();
+  await select.press('Enter');
+  await expect(select).toHaveCount(0);
+  const undo = page.getByRole('button', { name: 'Undo' });
+  if (chosen === 'Japan') await expect(undo).toBeDisabled();
+  else await expect(undo).toBeEnabled({ timeout: 20_000 });
 });

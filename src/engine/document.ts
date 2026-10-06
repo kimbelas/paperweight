@@ -39,10 +39,13 @@ export class PdfDocument {
   /** The `FPDF_FORMFILLINFO` backing `formHandle`; PDFium keeps the pointer. */
   private formInfoPtr = 0;
   /**
-   * Type size each widget's *own* appearance stream draws at, per page, by
-   * annotation index. Null where the file supplied no appearance.
+   * Type size each widget's own appearance stream draws at, by widget object
+   * number. Taken once, at the first open of a file, and carried into every
+   * later open of the same session: bytes saved after the form environment
+   * existed hold appearances PDFium generated at the auto size, so a snapshot
+   * re-taken from them records the bug as the file's own.
    */
-  private readonly originalApSizes = new Map<number, (number | null)[]>();
+  private originalApSizes = new Map<number, number>();
   /** Bumped by `reload`; see `generation`. */
   private generationCounter = 0;
 
@@ -60,10 +63,16 @@ export class PdfDocument {
    * The buffer is copied onto the WASM heap and must stay allocated: PDFium
    * parses lazily and reads from it for as long as the document is open.
    */
-  static open(mod: WrappedPdfiumModule, bytes: Uint8Array, password = ''): PdfDocument {
+  static open(
+    mod: WrappedPdfiumModule,
+    bytes: Uint8Array,
+    password = '',
+    appearanceSizes?: ReadonlyMap<number, number>,
+  ): PdfDocument {
     const { handle, dataPtr } = PdfDocument.load(mod, bytes, password);
     const doc = new PdfDocument(mod, handle, dataPtr, bytes.byteLength);
-    doc.initFormEnvironment();
+    if (appearanceSizes) doc.originalApSizes = new Map(appearanceSizes);
+    doc.initFormEnvironment(appearanceSizes === undefined);
     return doc;
   }
 
@@ -113,12 +122,14 @@ export class PdfDocument {
     this.assertOpen();
     const { handle, dataPtr } = PdfDocument.load(this.mod, bytes, '');
 
+    const sizes = this.originalApSizes;
     this.release();
+    this.originalApSizes = sizes;
     this.docHandle = handle;
     this.dataPtr = dataPtr;
     this.dataLen = bytes.byteLength;
     this.generationCounter++;
-    this.initFormEnvironment();
+    this.initFormEnvironment(false);
   }
 
   /**
@@ -149,21 +160,14 @@ export class PdfDocument {
     return this.formHandle;
   }
 
-  /**
-   * The size the file's own appearance for a widget draws at, if it had one.
-   *
-   * Recorded before the form-fill environment exists, because that is the
-   * only moment it can be known: see `snapshotAppearanceSizes`.
-   */
-  originalApSize(pageIndex: number, annotIndex: number): number | null {
-    return this.originalApSizes.get(pageIndex)?.[annotIndex] ?? null;
+  /** The size the file's own appearance for a widget draws at, if it had one. */
+  originalApSize(ref: number): number | null {
+    return this.originalApSizes.get(ref) ?? null;
   }
 
-  /** Every size the file's own appearances use on a page. */
-  originalApSizesOnPage(pageIndex: number): number[] {
-    return (this.originalApSizes.get(pageIndex) ?? []).filter(
-      (size): size is number => size !== null && size > 0,
-    );
+  /** Every recorded size, for carrying into the next open of this session. */
+  get appearanceSizes(): ReadonlyMap<number, number> {
+    return this.originalApSizes;
   }
 
   /**
@@ -176,10 +180,11 @@ export class PdfDocument {
    * the file actually supplied, so "the size this field is really drawn at"
    * becomes unanswerable. Asking first is the whole point.
    *
-   * Keyed by annotation index rather than field name: a name may live on a
-   * parent field rather than the widget, whereas the index is exactly what
-   * the mutation path iterates with. Undo reopens the document, which runs
-   * this again, so the mapping never goes stale.
+   * Keyed by widget object number rather than field name or annotation
+   * index: a name may live on a parent field, and an index shifts when an
+   * annotation is removed. Taken once per session, at the first open of a
+   * file: `reload` and the session's reopen carry the map forward, since the
+   * bytes they read were written after the environment existed.
    */
   private snapshotAppearanceSizes(): void {
     const { mod } = this;
@@ -190,30 +195,26 @@ export class PdfDocument {
       if (!page) continue;
 
       const count = mod.FPDFPage_GetAnnotCount(page);
-      const sizes: (number | null)[] = [];
 
       for (let i = 0; i < count; i++) {
         const annot = mod.FPDFPage_GetAnnot(page, i);
-        let size: number | null = null;
 
         if (annot) {
+          const ref = mod.EPDFAnnot_GetObjectNumber(annot);
           const needed = mod.FPDFAnnot_GetAP(annot, AP_NORMAL, 0, 0);
-          if (needed > 2) {
+          if (ref > 0 && needed > 2) {
             const text = withScope(mod, (scope) => {
               const buffer = scope.alloc(needed);
               mod.FPDFAnnot_GetAP(annot, AP_NORMAL, buffer, needed);
               return mod.pdfium.UTF16ToString(buffer);
             });
             const match = APPEARANCE_TF.exec(text);
-            if (match && Number(match[1]) > 0) size = Number(match[1]);
+            if (match && Number(match[1]) > 0) this.originalApSizes.set(ref, Number(match[1]));
           }
           mod.FPDFPage_CloseAnnot(annot);
         }
-
-        sizes.push(size);
       }
 
-      this.originalApSizes.set(p, sizes);
       mod.FPDF_ClosePage(page);
     }
   }
@@ -225,12 +226,12 @@ export class PdfDocument {
    * the overwhelmingly common case -- an ordinary document -- keeps exactly
    * the render path it had before.
    */
-  private initFormEnvironment(): void {
+  private initFormEnvironment(snapshot: boolean): void {
     const { mod } = this;
     if (mod.FPDF_GetFormType(this.docHandle) === FormType.None) return;
 
     // Before the environment, not after: it rewrites what we are reading.
-    this.snapshotAppearanceSizes();
+    if (snapshot) this.snapshotAppearanceSizes();
 
     const ptr = mod.pdfium.wasmExports.malloc(StructSize.FormFillInfo);
     if (!ptr) return; // A form we cannot draw is not worth failing the open for.
@@ -482,8 +483,6 @@ export class PdfDocument {
       this.mod.pdfium.wasmExports.free(this.formInfoPtr);
       this.formInfoPtr = 0;
     }
-
-    this.originalApSizes.clear();
 
     this.mod.pdfium.wasmExports.free(this.dataPtr);
     this.docHandle = 0;

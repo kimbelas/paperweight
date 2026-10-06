@@ -214,10 +214,8 @@ BT /F1 12 Tf 72 620 Td (Ordinary unkerned line for comparison) Tj ET`,
 //    "Signature" label in the bottom third. This is the flattened-signature
 //    case the detection heuristics have to find.
 // ---------------------------------------------------------------------------
-fixtures['flattened-signature.pdf'] = () => {
-  const w = 60;
-  const h = 20;
-  // A diagonal ink stroke: grey image, alpha where the "ink" is.
+/** A diagonal ink stroke: an RGB image, with alpha where the "ink" is. */
+function inkStroke(w = 60, h = 20) {
   const rgb = Buffer.alloc(w * h * 3, 0xff);
   const alpha = Buffer.alloc(w * h, 0x00);
   for (let x = 0; x < w; x++) {
@@ -232,6 +230,11 @@ fixtures['flattened-signature.pdf'] = () => {
       rgb[i * 3 + 2] = 0x60;
     }
   }
+  return { w, h, rgb, alpha };
+}
+
+fixtures['flattened-signature.pdf'] = () => {
+  const { w, h, rgb, alpha } = inkStroke();
   return buildPdf(
     [
       '<< /Type /Catalog /Pages 2 0 R >>',
@@ -263,6 +266,111 @@ q 180 0 0 60 130 135 cm /Im0 Do Q`,
     1,
   );
 };
+
+// ---------------------------------------------------------------------------
+// 7b. Forms nested two and three deep, each placed with a real translation,
+//     the middle one with its own /Matrix. This is how online form fillers and
+//     print drivers wrap a page: the page's own stream is one `Do`, and
+//     everything the user sees lives two levels down. PDFium rewrites a form's
+//     stream only when that form sits directly on the page, so a removal at
+//     this depth used to vanish on save while the screen showed it gone — an
+//     edited address printed twice, and a removed signature printed.
+//
+//     The outer form is drawn under a page-sized clip, as wrappers often are.
+//     PDFium discards a clip that crops nothing while parsing, so this one
+//     never reaches the engine — and the test pins that it does not.
+// ---------------------------------------------------------------------------
+fixtures['form-xobject-nested.pdf'] = () => {
+  const { w, h, rgb, alpha } = inkStroke();
+  return buildPdf(
+    [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
+        '/Resources << /Font << /F1 10 0 R >> /XObject << /FmA 5 0 R >> >> /Contents 4 0 R >>',
+      stream(
+        '',
+        `BT /F1 12 Tf 72 740 Td (Page level line) Tj ET
+q 0 0 612 792 re W n 1 0 0 1 40 30 cm /FmA Do Q`,
+      ),
+      // A: the outer wrapper, holding one line of its own and form B.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 572 762] ' +
+          '/Resources << /Font << /F1 10 0 R >> /XObject << /FmB 6 0 R >> >>',
+        `BT /F1 11 Tf 20 700 Td (Outer form line) Tj ET
+q 1 0 0 1 10 20 cm /FmB Do Q`,
+      ),
+      // B: the page's real content. Its /Matrix is folded into its children's
+      // coordinates by the parser, its placement is not.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 560 740] /Matrix [1 0 0 1 5 5] ' +
+          '/Resources << /Font << /F1 10 0 R >> /XObject << /FmC 7 0 R /Im0 8 0 R >> >>',
+        `BT /F1 14 Tf 30 600 Td (Nested two levels deep) Tj ET
+BT /F1 10 Tf 30 580 Td (Stays where it is) Tj ET
+0 0 1 rg 30 500 100 20 re f
+q 1 0 0 1 30 400 cm /FmC Do Q
+BT /F1 9 Tf 300 90 Td (Signature) Tj ET
+q 120 0 0 40 300 100 cm /Im0 Do Q`,
+      ),
+      // C: a third level, for the chain of two lifts.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 300 50] ' +
+          '/Resources << /Font << /F1 10 0 R >> >>',
+        'BT /F1 9 Tf 10 10 Td (Three levels deep) Tj ET',
+      ),
+      stream(
+        `/Type /XObject /Subtype /Image /Width ${w} /Height ${h} ` +
+          '/ColorSpace /DeviceRGB /BitsPerComponent 8 /SMask 9 0 R',
+        rgb,
+        true,
+      ),
+      stream(
+        `/Type /XObject /Subtype /Image /Width ${w} /Height ${h} ` +
+          '/ColorSpace /DeviceGray /BitsPerComponent 8',
+        alpha,
+        true,
+      ),
+      HELV,
+    ],
+    1,
+  );
+};
+
+// ---------------------------------------------------------------------------
+// 7c. The same shape under a clip that crops it: the outer form is drawn
+//     inside a frame smaller than its contents, and one of the nested lines is
+//     outside the frame. Lifting the inner form onto the page would reveal
+//     that line, so the engine must refuse rather than report success.
+// ---------------------------------------------------------------------------
+fixtures['form-xobject-clipped.pdf'] = () =>
+  buildPdf(
+    [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] ' +
+        '/Resources << /Font << /F1 7 0 R >> /XObject << /FmA 5 0 R >> >> /Contents 4 0 R >>',
+      stream(
+        '',
+        `BT /F1 12 Tf 72 740 Td (Page level line) Tj ET
+q 40 560 300 60 re W n 1 0 0 1 40 30 cm /FmA Do Q`,
+      ),
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 572 762] ' +
+          '/Resources << /Font << /F1 7 0 R >> /XObject << /FmB 6 0 R >> >>',
+        'q 1 0 0 1 10 20 cm /FmB Do Q',
+      ),
+      // In page space the first line sits inside the frame at y=600 and the
+      // second, at y=500, is cropped away entirely.
+      stream(
+        '/Type /XObject /Subtype /Form /FormType 1 /BBox [0 0 560 740] ' +
+          '/Resources << /Font << /F1 7 0 R >> >>',
+        `BT /F1 14 Tf 30 550 Td (Nested and clipped) Tj ET
+BT /F1 14 Tf 30 450 Td (Hidden by the clip) Tj ET`,
+      ),
+      HELV,
+    ],
+    1,
+  );
 
 // ---------------------------------------------------------------------------
 // 8. Signatures as annotations: a Stamp with an appearance stream, and an Ink
@@ -603,6 +711,117 @@ BT /F1 12 Tf 72 670 Td (The stream carrying this text is deflated.) Tj ET`,
     ],
     1,
   );
+
+// ---------------------------------------------------------------------------
+// Mixed page orientation: portrait, portrait with /Rotate 90, a landscape
+// media box, portrait. Fitting the zoom to the current page made scrolling
+// through this crash the editor; the fit is now taken over every page.
+// ---------------------------------------------------------------------------
+fixtures['mixed-orientation.pdf'] = () => {
+  const label = (text) => stream('', `BT /F1 18 Tf 72 500 Td (${text}) Tj ET`);
+  return buildPdf(
+    [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R 6 0 R] /Count 4 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 11 0 R >> >> /Contents 7 0 R >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /Font << /F1 11 0 R >> >> /Contents 8 0 R >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 11 0 R >> >> /Contents 9 0 R >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 11 0 R >> >> /Contents 10 0 R >>',
+      label('Portrait one'),
+      label('Rotated'),
+      label('Landscape'),
+      label('Portrait two'),
+      HELV,
+    ],
+    1,
+  );
+};
+
+// ---------------------------------------------------------------------------
+// Every field shape the form path has to handle and once did not: a radio
+// group (its options share a name), fixed and editable combos, a password
+// field with an auto size, Hidden and NoView widgets over page text, /MaxLen,
+// a size inherited from the parent field and from /AcroForm /DA, one field
+// with two widgets, and a tall combo with an auto size (Acrobat's default for
+// combos), which PDFium would otherwise redraw at the box height. Fields were once looked up by name, which made
+// every shared-name case act on the first widget.
+// ---------------------------------------------------------------------------
+fixtures['form-kinds.pdf'] = () => {
+  const widget = (body) => `<< /Type /Annot /Subtype /Widget /P 3 0 R ${body} >>`;
+  const DA10 = '/DA (/Helv 10 Tf 0 g)';
+  return buildPdf(
+    [
+      // 1 catalog
+      '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 20 0 R 21 0 R 24 0 R] ' +
+        '/DA (/Helv 9 Tf 0 g) /DR << /Font << /Helv 5 0 R /ZaDb 6 0 R >> >> >> >>',
+      // 2 pages
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      // 3 page
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R ' +
+        '/Annots [8 0 R 9 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 19 0 R 20 0 R 22 0 R 23 0 R 24 0 R] >>',
+      // 4 contents
+      stream(
+        '',
+        [
+          'BT /F1 16 Tf 72 750 Td (FORM KINDS) Tj ET',
+          'BT /F1 10 Tf 72 704 Td (Sex: M F) Tj ET',
+          'BT /F1 10 Tf 72 664 Td (Country) Tj ET',
+          'BT /F1 10 Tf 72 634 Td (City) Tj ET',
+          'BT /F1 10 Tf 72 604 Td (PIN) Tj ET',
+          'BT /F1 10 Tf 200 564 Td (UNDER HIDDEN) Tj ET',
+          'BT /F1 10 Tf 200 534 Td (UNDER NOVIEW) Tj ET',
+          'BT /F1 10 Tf 72 494 Td (Code) Tj ET',
+          'BT /F1 10 Tf 72 464 Td (Inherited) Tj ET',
+          'BT /F1 10 Tf 72 434 Td (Form default) Tj ET',
+          'BT /F1 10 Tf 72 404 Td (Shared) Tj ET',
+        ].join('\n'),
+      ),
+      // 5, 6 fonts
+      HELV,
+      '<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>',
+      // 7 radio parent, 8 and 9 its widgets, 10 and 11 their appearances
+      '<< /FT /Btn /T (Sex) /Ff 49152 /V /M /Kids [8 0 R 9 0 R] >>',
+      '<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R /F 4 /AS /M /Rect [200 700 214 714] /AP << /N << /M 10 0 R /Off 11 0 R >> >> >>',
+      '<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R /F 4 /AS /Off /Rect [260 700 274 714] /AP << /N << /F 10 0 R /Off 11 0 R >> >> >>',
+      stream(
+        '/Type /XObject /Subtype /Form /BBox [0 0 14 14]',
+        '0.6 w 0 G 1 1 12 12 re S 3 3 m 11 11 l S 11 3 m 3 11 l S',
+      ),
+      stream('/Type /XObject /Subtype /Form /BBox [0 0 14 14]', '0.6 w 0 G 1 1 12 12 re S'),
+      // 12 fixed combo
+      widget(
+        `/F 4 /FT /Ch /Ff 131072 /T (Country) /Opt [(Philippines) (Japan) (Canada)] /V (Japan) /Rect [200 660 360 678] ${DA10}`,
+      ),
+      // 13 editable combo (Combo | Edit)
+      widget(
+        `/F 4 /FT /Ch /Ff 393216 /T (City) /Opt [(Manila) (Tokyo)] /V (Tokyo) /Rect [200 630 360 648] ${DA10}`,
+      ),
+      // 14 password, auto size
+      widget(
+        '/F 4 /FT /Tx /Ff 8192 /T (Pin) /V (secret) /Rect [200 600 300 616] /DA (/Helv 0 Tf 0 g)',
+      ),
+      // 15 hidden, 16 no-view
+      widget(`/F 2 /FT /Tx /T (HiddenBox) /V (HIDDEN) /Rect [195 558 360 576] ${DA10}`),
+      widget(`/F 32 /FT /Tx /T (NoViewBox) /V (NOVIEW) /Rect [195 528 360 546] ${DA10}`),
+      // 17 max length
+      widget(`/F 4 /FT /Tx /T (Code) /MaxLen 5 /V (AB) /Rect [200 490 300 506] ${DA10}`),
+      // 18 parent carrying the size, 19 its widget with no /DA
+      `<< /FT /Tx /T (Inherited) /V (FROM PARENT) ${DA10} /Kids [19 0 R] >>`,
+      '<< /Type /Annot /Subtype /Widget /Parent 18 0 R /P 3 0 R /F 4 /Rect [200 460 400 476] >>',
+      // 20 relies on /AcroForm /DA
+      widget('/F 4 /FT /Tx /T (FormDefault) /V (FROM ACROFORM) /Rect [200 430 400 446]'),
+      // 21 one field, 22 and 23 its two widgets
+      `<< /FT /Tx /T (Shared) /V (SAME) ${DA10} /Kids [22 0 R 23 0 R] >>`,
+      '<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /F 4 /Rect [200 400 300 416] >>',
+      '<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /F 4 /Rect [320 400 420 416] >>',
+      // 24 fixed combo, auto size, 24pt tall
+      widget(
+        '/F 4 /FT /Ch /Ff 131072 /T (Size) /Opt [(Small) (Medium) (Large)] /V (Small) /Rect [200 360 360 384] /DA (/Helv 0 Tf 0 g)',
+      ),
+    ],
+    1,
+  );
+};
 
 await mkdir(OUT, { recursive: true });
 await mkdir(join(OUT, 'local'), { recursive: true });

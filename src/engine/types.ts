@@ -294,6 +294,14 @@ export type FormFieldKind =
  */
 export interface FormFieldInfo {
   page: number;
+  /**
+   * The widget's PDF object number, which is how a field is addressed.
+   *
+   * Not the name: every option of a radio group shares one, as does every
+   * widget of a field shown in two places, so a lookup by name always found
+   * the first. Object numbers survive the engine's own save and reload.
+   */
+  ref: number;
   /** The field's name in the form, e.g. `Surname`. */
   name: string;
   kind: FormFieldKind;
@@ -324,9 +332,18 @@ export interface FormFieldInfo {
    * Only a field the engine will leave as a field clips. One whose appearance
    * PDFium cannot be trusted to rebuild is drawn into the page instead, and
    * page text runs on in full — so for those, neither the cut-off warning nor
-   * the offer to widen the box means anything.
+   * the offer to widen the box means anything. A password field is never
+   * drawn into the page, so it always clips.
    */
   clips: boolean;
+  /** A password field: its value is masked and never drawn as page text. */
+  password: boolean;
+  /** The most characters the field accepts, when the form sets a limit. */
+  maxLen?: number;
+  /** A combo box's options, in order. */
+  options?: string[];
+  /** A combo box that also accepts a typed value. */
+  editableChoice: boolean;
   /** Why it cannot be changed, when it cannot. */
   notEditableReason?: string;
 }

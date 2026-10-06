@@ -44,6 +44,38 @@ the decisions. `docs/research/01-editing-engines.md` and
   `FPDFPage_RemoveObject` transfers ownership, so skipping
   `FPDFPageObj_Destroy` leaks on every edit.
 
+- **A form XObject's stream is rewritten only when that form sits directly on
+  the page and has had an object removed from it.** `FPDFPage_GenerateContent`
+  regenerates the page's own streams from its dirty objects; when it writes a
+  form object it descends into the form's stream only if something was
+  *removed* from that form, never for an object merely changed inside it, and
+  it only descends into forms it is writing. So one level down a removal
+  persists, and two levels down it does not: the inner form is dirty, but the
+  outer form has lost nothing, so its stream is never rewritten and the inner
+  one is never visited. The screen shows the object gone; the saved file has
+  it. This shipped: a visa form filled online had its whole page wrapped in a
+  form inside a form, an edited address printed with the new value drawn over
+  the old, and a removed signature printed. The engine tests had checked the
+  object model, which had every change — only the bytes did not.
+
+  Marking the ancestors dirty with a no-op transform does not help; it
+  rewrites the page stream and nothing below it. And the rewrite PDFium does
+  perform, one level down, is itself wrong: it emits the form's children with
+  the form's own `/Matrix` already folded in and leaves `/Matrix` in the
+  dictionary, so on reload everything left in the form shifts by it. So
+  PDFium is never allowed to rewrite a form's stream. `hoist.ts` dissolves
+  every form on the path into the page before the removal: each child is
+  taken out and inserted where the form was, in order, carrying the form's
+  matrix into its own with its clip path transformed the same way, and the
+  emptied form is removed. The target is then an ordinary page object and the
+  page stream is the only one regenerated. Forms off the path move as units
+  and keep their streams byte for byte. A form whose clip crops any of its
+  children is refused, since dissolving it would reveal what the clip hides.
+  `form-xobject-nested.pdf` pins this at two and three levels with a real
+  `/Matrix`; every test in `nested-forms.test.ts` saves and reopens, because
+  this whole class of bug is invisible to a test that inspects the object
+  model in memory.
+
 - **A filled form only renders through the form-fill environment.** PDFium
   draws page content and annotation appearance streams from
   `FPDF_RenderPageBitmap`, and a form field's value is neither: it lives in
@@ -86,10 +118,48 @@ the decisions. `docs/research/01-editing-engines.md` and
   with the box holding the answer, so asking the text layer first offers to
   edit the caption instead of the field.
 
+  **In the Select tool a click selects a field; in the Edit text tool it edits
+  it at once.** Selecting is what that tool does to everything else, and it is
+  how a field is moved: the outline is the drag handle, exactly as for a line
+  of text, and a second click on it or Enter opens the value. This replaced
+  "a click edits, whichever tool is armed" and keeps its point — a form must
+  never look inert when clicked — by having the first click answer visibly,
+  with a chip that says what the next one does. `moveFormField` translates
+  `/Rect` and rebuilds nothing, since an appearance stream is drawn relative
+  to the box and travels with it, but it must reload the page for the same
+  cached-geometry reason as `setFormFieldWidth`. The box is clamped to the
+  page's own bounding box, read from the page, because `/Rect` is in
+  unrotated user space and the rotated width and height are the wrong
+  yardstick.
+
   A form edit repaints its page but must never mark it dirty. The value is in
   the form, not the content stream, so there is nothing to regenerate, and
   calling `GenerateContent` would rewrite a page the user never edited.
   `commit` and `commitSync` take a `repaint` list for exactly this case.
+
+- **A widget is addressed by its object number, never by its name.** Every
+  option of a radio group shares one name, and so does every widget of a
+  field shown twice; looking fields up by name made the second radio option
+  tick the first, and moving one widget of a pair move the other.
+  `FormFieldInfo.ref` is `EPDFAnnot_GetObjectNumber`, every worker method
+  that touches a field takes it, and `withFieldAnnot` resolves it at the
+  moment of the mutation. PDFium's non-incremental save keeps object
+  numbers, which `form-kinds.test.ts` checks across `reload`. Names remain
+  the caption source and nothing else.
+
+- **On touch, a field is hit-tested on the page, with slop.** `PageView`
+  keeps each page's field list and `hitField` answers a tap synchronously,
+  because iOS raises the keyboard only for a focus inside the tap and a worker
+  round trip ends it. A coarse pointer gets `TOUCH_SLOP_PX` around each field,
+  since a fitted 14pt field is smaller than a fingertip and a near miss
+  otherwise edits the caption beside it. Drags go through `trackPointer`,
+  which handles `pointercancel` and a 10px finger threshold, and the outline
+  is the only element with `touch-action: none`. A button inside an editor
+  uses `pressHandlers`: it must not take focus from the input, and WebKit
+  sends no click after a cancelled press, so it acts on release, and only on
+  the release of the pointer that pressed it: a drag-select in the input that
+  ends over the button is not a press. The Cover tool's canvas takes
+  `pinch-zoom`, never `none`, so a page can still be zoomed while it is armed.
 
 - **A field clips to its own rectangle, so its width is part of the
   document.** A value wider than the box is cut off in the file — on screen
@@ -118,7 +188,9 @@ the decisions. `docs/research/01-editing-engines.md` and
 
   Only a field that stays a field clips, and `FormFieldInfo.clips` is that
   answer — the same condition as `appearanceIsTrustworthy`, since a value the
-  engine draws into the page instead runs on in full. It gates "Widen to fit"
+  engine draws into the page instead runs on in full. The one exemption is a
+  password field: it is never drawn into the page, so it stays a field and
+  clips whatever its size says. It gates "Widen to fit"
   and the cut-off warning together, because on a field that will be redrawn as
   page text both describe something the file does not do: the warning fires on
   a value nothing will cut, and the width the user then sets is discarded by
@@ -129,7 +201,8 @@ the decisions. `docs/research/01-editing-engines.md` and
   PDFium takes it literally: on a 24pt-tall widget it picks **18pt**, where the
   rest of the form sits at 9pt. Worse, the oversized value no longer fits its
   own rectangle, and a field clips to its rectangle — so the value comes back
-  both huge *and* truncated. Width is the user's to change; size is not.
+  both huge *and* truncated. Position and width are the user's to change;
+  size is not.
 
   `drawnSize` answers in four steps and never returns "auto": an explicit
   `/DA` size is the document's own decision and is left alone; else the size
@@ -247,9 +320,12 @@ the decisions. `docs/research/01-editing-engines.md` and
   auto size. After that instant there is no way to tell a stream the file
   supplied from one PDFium invented, so "the size this field is really drawn
   at" becomes unanswerable and preserving it would preserve the bug. The
-  snapshot is keyed by annotation index, since a field's name can live on a
-  parent rather than the widget; undo reopens the document and re-runs it, so
-  it cannot go stale.
+  snapshot is keyed by widget object number and taken once, at the first
+  open of a file. `reload` and the session's reopen for undo, redo and rollback
+  carry it forward, because every later open reads bytes that `doc.save()` wrote
+  after the environment existed: re-snapshotting them recorded PDFium's 18pt
+  auto size as the file's own, and an undo brought every auto-sized field back
+  at 18pt.
 
 - **`scripts/inspect-form.mjs` reports a form's structure and no values.** For
   diagnosing a real document without handling somebody's passport number: it
@@ -580,11 +656,16 @@ exactly like a broken recogniser. Use `scanned-text.pdf`, generated by
 
 - Text edits are line-scoped and never reflow. PDF has no paragraph model; a
   longer replacement is condensed, then shrunk, then flagged as overflowing.
-- Text inside a form XObject is edited by removing it and redrawing it at
-  page level, not in place. In-place mutation reports success and is lost on
-  save, because regenerating the page does not rewrite a form's own content
-  stream and PDFium exposes no call that does. The redraw keeps the original
-  font when that font is embedded and covers the text.
+- Text inside a form XObject is edited by dissolving the forms that hold it
+  into the page, then removing it and redrawing it at page level, not in
+  place. In-place mutation reports success and is lost on save, because
+  PDFium rewrites a form's own content stream only for a removal, only once
+  the form sits directly on the page, and then with the form's `/Matrix`
+  applied twice (see the hard rule on form XObjects). The redraw keeps the
+  original font when that font is embedded and covers the text. Content
+  inside a form the page clips to a frame smaller than the form is refused
+  with a message rather than edited: dissolving it would show what the frame
+  hides.
 - Scanned pages have no text objects. They can be read with OCR and then
   changed by covering and redrawing, which the UI presents as a separate,
   clearly-labelled operation rather than as editing.

@@ -111,10 +111,10 @@ describe('editing through the session', () => {
   it('warns once, not repeatedly, about invalidating a digital signature', async () => {
     const session = await openSession('acroform-sig-field.pdf');
 
-    const first = session.rotate(0, 1);
+    const first = await session.rotate(0, 1);
     expect(first.badges.some((b) => b.kind === 'signature-invalidated')).toBe(true);
 
-    const second = session.rotate(0, 1);
+    const second = await session.rotate(0, 1);
     expect(second.badges.some((b) => b.kind === 'signature-invalidated')).toBe(false);
     session.close();
   });
@@ -124,7 +124,7 @@ describe('editing through the session', () => {
     const scan = session.signatures();
     expect(scan.candidates.length).toBe(2);
 
-    const result = session.removeSignatureById(scan.candidates[0].id);
+    const result = await session.removeSignatureById(scan.candidates[0].id);
     expect(result.changedPages).toEqual([0]);
 
     // The scan is invalidated by the edit, so the removed one is gone.
@@ -192,7 +192,7 @@ describe('undo and redo', () => {
     const session = await openSession('flattened-signature.pdf');
     const candidate = session.signatures().candidates.find((c) => c.kind === 'image')!;
 
-    session.removeSignatureById(candidate.id);
+    await session.removeSignatureById(candidate.id);
     expect(session.objects(0).filter((o) => o.type === 3).length).toBe(0);
 
     await session.undo();
@@ -202,7 +202,7 @@ describe('undo and redo', () => {
 
   it('undoes a page deletion', async () => {
     const session = await openSession('multipage.pdf');
-    session.deletePages([1, 3]);
+    await session.deletePages([1, 3]);
     expect(session.info().pageCount).toBe(3);
 
     await session.undo();
@@ -236,14 +236,14 @@ describe('page operations', () => {
   it('rotates a page', async () => {
     const session = await openSession('simple-text.pdf');
     expect(session.info().pages[0].rotation).toBe(0);
-    session.rotate(0, 1);
+    await session.rotate(0, 1);
     expect(session.info().pages[0].rotation).toBe(90);
     session.close();
   });
 
   it('deletes pages from the highest index down', async () => {
     const session = await openSession('multipage.pdf');
-    session.deletePages([0, 2]);
+    await session.deletePages([0, 2]);
     const remaining = [0, 1, 2].map((i) =>
       session
         .textLines(i)
@@ -258,13 +258,13 @@ describe('page operations', () => {
 
   it('refuses to delete every page', async () => {
     const session = await openSession('multipage.pdf');
-    expect(() => session.deletePages([0, 1, 2, 3, 4])).toThrow(/at least one page/i);
+    await expect(session.deletePages([0, 1, 2, 3, 4])).rejects.toThrow(/at least one page/i);
     session.close();
   });
 
   it('inserts a blank page matching the size of its neighbour', async () => {
     const session = await openSession('simple-text.pdf');
-    session.insertBlankPage(1);
+    await session.insertBlankPage(1);
     const info = session.info();
     expect(info.pageCount).toBe(2);
     expect(info.pages[1].width).toBeCloseTo(612, 0);
@@ -276,7 +276,7 @@ describe('page operations', () => {
   it('reorders pages', async () => {
     const session = await openSession('multipage.pdf');
     // Move page 5 (index 4) to the front.
-    session.movePages([4], 0);
+    await session.movePages([4], 0);
     expect(
       session
         .textLines(0)
