@@ -29,6 +29,7 @@ import { toImageData } from './imageData';
 import { ChoiceEditor } from './ChoiceEditor';
 import { InlineTextEditor } from './InlineTextEditor';
 import { OverlayLayer } from './OverlayLayer';
+import { trackPointer } from './pointer';
 import { fieldSelection, nextOverlayId, useEditor } from './store';
 import {
   cssDeltaToPdf,
@@ -1010,54 +1011,47 @@ export function PageView({
   const handlePointerDown = useCallback(
     (event: React.PointerEvent) => {
       if (tool !== 'cover' || !transform) return;
-      event.preventDefault();
       const start = localPoint(event);
-      const target = event.currentTarget as HTMLElement;
-      target.setPointerCapture(event.pointerId);
-
-      const move = (moveEvent: PointerEvent) => {
-        const box = canvasRef.current?.getBoundingClientRect();
-        if (!box) return;
-        const cx = moveEvent.clientX - box.left;
-        const cy = moveEvent.clientY - box.top;
-        setMarquee({
-          x: Math.min(start.x, cx),
-          y: Math.min(start.y, cy),
-          w: Math.abs(cx - start.x),
-          h: Math.abs(cy - start.y),
-        });
-      };
-
-      const up = async () => {
-        target.releasePointerCapture(event.pointerId);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-
-        const box = marqueeRef.current;
-        setMarquee(null);
-        if (!box || box.w < 4 || box.h < 4) return;
-
-        const rect = cssRectToPdf(transform, {
-          left: box.x,
-          top: box.y,
-          width: box.w,
-          height: box.h,
-        });
-
-        // Sample the page behind the rectangle so a cover over a shaded cell
-        // or a coloured band matches it, instead of leaving a white patch.
-        let colour = { r: 255, g: 255, b: 255, a: 255 };
-        try {
-          colour = await engine.sampleBackground(page.index, rect);
-        } catch {
-          /* White is a reasonable default if sampling fails. */
-        }
-
-        addOverlay({ id: nextOverlayId(), page: page.index, rect, kind: 'cover', colour });
-      };
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
+      const started = trackPointer(
+        event,
+        {
+          onMove: (dx, dy) => {
+            const cx = start.x + dx;
+            const cy = start.y + dy;
+            setMarquee({
+              x: Math.min(start.x, cx),
+              y: Math.min(start.y, cy),
+              w: Math.abs(cx - start.x),
+              h: Math.abs(cy - start.y),
+            });
+          },
+          onCancel: () => setMarquee(null),
+          onEnd: () => {
+            const box = marqueeRef.current;
+            setMarquee(null);
+            if (!box || box.w < 4 || box.h < 4) return;
+            const rect = cssRectToPdf(transform, {
+              left: box.x,
+              top: box.y,
+              width: box.w,
+              height: box.h,
+            });
+            void (async () => {
+              // Sample the page behind the rectangle so a cover over a shaded
+              // cell matches it instead of leaving a white patch.
+              let colour = { r: 255, g: 255, b: 255, a: 255 };
+              try {
+                colour = await engine.sampleBackground(page.index, rect);
+              } catch {
+                /* White is a reasonable default if sampling fails. */
+              }
+              addOverlay({ id: nextOverlayId(), page: page.index, rect, kind: 'cover', colour });
+            })();
+          },
+        },
+        { capture: event.currentTarget },
+      );
+      if (started) event.preventDefault();
     },
     [tool, transform, localPoint, engine, page.index, addOverlay],
   );
@@ -1088,7 +1082,7 @@ export function PageView({
       <canvas
         ref={canvasRef}
         className="page-sheet block h-full w-full"
-        style={{ cursor }}
+        style={{ cursor, touchAction: tool === 'cover' ? 'none' : undefined }}
         onClick={handleClick}
         onPointerMove={handleMove}
         onPointerLeave={() => setHover(null)}
@@ -1354,45 +1348,31 @@ function SelectionOutline({
 
   const startDrag = useCallback(
     (event: React.PointerEvent) => {
+      const started = trackPointer(
+        event,
+        {
+          onMove: (x, y) => setDrag({ x, y }),
+          onCancel: () => setDrag(null),
+          onEnd: (x, y, moved) => {
+            setDrag(null);
+            // A press that did not travel is a tap: it must not nudge anything
+            // or leave an undo entry, and on a form field it opens the value.
+            // Decided here rather than in a click handler, because the
+            // pointerdown below calls `preventDefault` and WebKit then never
+            // synthesises the click that would follow.
+            if (!moved) {
+              onActivate?.();
+              return;
+            }
+            const { dx, dy } = cssDeltaToPdf(transform, x, y);
+            void onMove(dx, dy);
+          },
+        },
+        { capture: event.currentTarget },
+      );
+      if (!started) return;
       event.preventDefault();
       event.stopPropagation();
-      const target = event.currentTarget as HTMLElement;
-      target.setPointerCapture(event.pointerId);
-
-      const startX = event.clientX;
-      const startY = event.clientY;
-      let last = { x: 0, y: 0 };
-
-      const move = (moveEvent: PointerEvent) => {
-        last = { x: moveEvent.clientX - startX, y: moveEvent.clientY - startY };
-        setDrag(last);
-      };
-
-      const up = () => {
-        target.releasePointerCapture(event.pointerId);
-        window.removeEventListener('pointermove', move);
-        window.removeEventListener('pointerup', up);
-        setDrag(null);
-
-        // A press that barely travelled is a click, not a drag: it must not
-        // nudge anything a pixel or leave an undo entry behind, and on a form
-        // field it is what opens the value.
-        //
-        // Decided here rather than in a click handler. The pointerdown above
-        // calls `preventDefault` so a touch drag does not scroll the page
-        // instead, and WebKit then never synthesises the click that would
-        // follow — which is exactly how this shipped broken on a phone while
-        // passing in Chromium and Firefox.
-        if (Math.hypot(last.x, last.y) < 3) {
-          onActivate?.();
-          return;
-        }
-        const { dx, dy } = cssDeltaToPdf(transform, last.x, last.y);
-        void onMove(dx, dy);
-      };
-
-      window.addEventListener('pointermove', move);
-      window.addEventListener('pointerup', up);
     },
     [transform, onMove, onActivate],
   );
@@ -1407,6 +1387,10 @@ function SelectionOutline({
         outline: '2px solid var(--app-selection)',
         outlineOffset: 1,
         cursor: 'move',
+        // Without this a finger drag is taken as a page pan: the browser
+        // cancels the pointer and the field never moves. Only the outline, so
+        // the page itself keeps pinch-zoom.
+        touchAction: 'none',
         background: drag ? 'color-mix(in srgb, var(--app-accent) 10%, transparent)' : 'transparent',
         transform: drag ? `translate(${drag.x}px, ${drag.y}px)` : undefined,
       }}
