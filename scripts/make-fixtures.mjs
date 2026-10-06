@@ -712,6 +712,31 @@ BT /F1 12 Tf 72 670 Td (The stream carrying this text is deflated.) Tj ET`,
     1,
   );
 
+// ---------------------------------------------------------------------------
+// Mixed page orientation: portrait, portrait with /Rotate 90, a landscape
+// media box, portrait. Fitting the zoom to the current page made scrolling
+// through this crash the editor; the fit is now taken over every page.
+// ---------------------------------------------------------------------------
+fixtures['mixed-orientation.pdf'] = () => {
+  const label = (text) => stream('', `BT /F1 18 Tf 72 500 Td (${text}) Tj ET`);
+  return buildPdf(
+    [
+      '<< /Type /Catalog /Pages 2 0 R >>',
+      '<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R 6 0 R] /Count 4 >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 11 0 R >> >> /Contents 7 0 R >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Rotate 90 /Resources << /Font << /F1 11 0 R >> >> /Contents 8 0 R >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 792 612] /Resources << /Font << /F1 11 0 R >> >> /Contents 9 0 R >>',
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 11 0 R >> >> /Contents 10 0 R >>',
+      label('Portrait one'),
+      label('Rotated'),
+      label('Landscape'),
+      label('Portrait two'),
+      HELV,
+    ],
+    1,
+  );
+};
+
 await mkdir(OUT, { recursive: true });
 await mkdir(join(OUT, 'local'), { recursive: true });
 

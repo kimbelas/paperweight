@@ -22,6 +22,7 @@ import {
 } from '@/io/storage';
 import type { OcrLine } from '@/ocr/recognise';
 import { useOcr } from '@/ocr/useOcr';
+import { fitZoom } from './fit';
 import { Landing } from './Landing';
 import { useMediaQuery } from './media';
 import { Notices } from './Notices';
@@ -719,23 +720,15 @@ export default function Editor() {
     const node = scrollRef.current;
     if (!node) return;
 
-    const fit = () => {
-      const page = info.pages[currentPage] ?? info.pages[0];
-      if (!page) return;
-      const available = node.clientWidth - 48;
-      const availableHeight = node.clientHeight - 48;
-      const next =
-        fitMode === 'width'
-          ? available / page.width
-          : Math.min(available / page.width, availableHeight / page.height);
-      setZoom(Math.max(0.1, Math.min(4, next)), fitMode);
-    };
+    // Fitted to the document, never to `currentPage`: see `fitZoom`.
+    const fit = () =>
+      setZoom(fitZoom(info.pages, fitMode, node.clientWidth - 48, node.clientHeight - 48), fitMode);
 
     fit();
     const observer = new ResizeObserver(fit);
     observer.observe(node);
     return () => observer.disconnect();
-  }, [info, fitMode, currentPage, setZoom]);
+  }, [info, fitMode, setZoom]);
 
   /** Ctrl or Cmd plus wheel zooms, as it does in every other document viewer. */
   useEffect(() => {
