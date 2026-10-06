@@ -737,6 +737,85 @@ fixtures['mixed-orientation.pdf'] = () => {
   );
 };
 
+// ---------------------------------------------------------------------------
+// Every field shape the form path has to handle and once did not: a radio
+// group (its options share a name), fixed and editable combos, a password
+// field with an auto size, Hidden and NoView widgets over page text, /MaxLen,
+// a size inherited from the parent field and from /AcroForm /DA, and one
+// field with two widgets. Fields were once looked up by name, which made
+// every shared-name case act on the first widget.
+// ---------------------------------------------------------------------------
+fixtures['form-kinds.pdf'] = () => {
+  const widget = (body) => `<< /Type /Annot /Subtype /Widget /P 3 0 R ${body} >>`;
+  const DA10 = '/DA (/Helv 10 Tf 0 g)';
+  return buildPdf(
+    [
+      // 1 catalog
+      '<< /Type /Catalog /Pages 2 0 R /AcroForm << /Fields [7 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 18 0 R 20 0 R 21 0 R] ' +
+        '/DA (/Helv 9 Tf 0 g) /DR << /Font << /Helv 5 0 R /ZaDb 6 0 R >> >> >> >>',
+      // 2 pages
+      '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+      // 3 page
+      '<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 5 0 R >> >> /Contents 4 0 R ' +
+        '/Annots [8 0 R 9 0 R 12 0 R 13 0 R 14 0 R 15 0 R 16 0 R 17 0 R 19 0 R 20 0 R 22 0 R 23 0 R] >>',
+      // 4 contents
+      stream(
+        '',
+        [
+          'BT /F1 16 Tf 72 750 Td (FORM KINDS) Tj ET',
+          'BT /F1 10 Tf 72 704 Td (Sex: M F) Tj ET',
+          'BT /F1 10 Tf 72 664 Td (Country) Tj ET',
+          'BT /F1 10 Tf 72 634 Td (City) Tj ET',
+          'BT /F1 10 Tf 72 604 Td (PIN) Tj ET',
+          'BT /F1 10 Tf 200 564 Td (UNDER HIDDEN) Tj ET',
+          'BT /F1 10 Tf 200 534 Td (UNDER NOVIEW) Tj ET',
+          'BT /F1 10 Tf 72 494 Td (Code) Tj ET',
+          'BT /F1 10 Tf 72 464 Td (Inherited) Tj ET',
+          'BT /F1 10 Tf 72 434 Td (Form default) Tj ET',
+          'BT /F1 10 Tf 72 404 Td (Shared) Tj ET',
+        ].join('\n'),
+      ),
+      // 5, 6 fonts
+      HELV,
+      '<< /Type /Font /Subtype /Type1 /BaseFont /ZapfDingbats >>',
+      // 7 radio parent, 8 and 9 its widgets, 10 and 11 their appearances
+      '<< /FT /Btn /T (Sex) /Ff 49152 /V /M /Kids [8 0 R 9 0 R] >>',
+      '<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R /F 4 /AS /M /Rect [200 700 214 714] /AP << /N << /M 10 0 R /Off 11 0 R >> >> >>',
+      '<< /Type /Annot /Subtype /Widget /Parent 7 0 R /P 3 0 R /F 4 /AS /Off /Rect [260 700 274 714] /AP << /N << /F 10 0 R /Off 11 0 R >> >> >>',
+      stream(
+        '/Type /XObject /Subtype /Form /BBox [0 0 14 14]',
+        '0.6 w 0 G 1 1 12 12 re S 3 3 m 11 11 l S 11 3 m 3 11 l S',
+      ),
+      stream('/Type /XObject /Subtype /Form /BBox [0 0 14 14]', '0.6 w 0 G 1 1 12 12 re S'),
+      // 12 fixed combo
+      widget(
+        `/F 4 /FT /Ch /Ff 131072 /T (Country) /Opt [(Philippines) (Japan) (Canada)] /V (Japan) /Rect [200 660 360 678] ${DA10}`,
+      ),
+      // 13 editable combo (Combo | Edit)
+      widget(
+        `/F 4 /FT /Ch /Ff 393216 /T (City) /Opt [(Manila) (Tokyo)] /V (Tokyo) /Rect [200 630 360 648] ${DA10}`,
+      ),
+      // 14 password, auto size
+      widget('/F 4 /FT /Tx /Ff 8192 /T (Pin) /V (secret) /Rect [200 600 300 616] /DA (/Helv 0 Tf 0 g)'),
+      // 15 hidden, 16 no-view
+      widget(`/F 2 /FT /Tx /T (HiddenBox) /V (HIDDEN) /Rect [195 558 360 576] ${DA10}`),
+      widget(`/F 32 /FT /Tx /T (NoViewBox) /V (NOVIEW) /Rect [195 528 360 546] ${DA10}`),
+      // 17 max length
+      widget(`/F 4 /FT /Tx /T (Code) /MaxLen 5 /V (AB) /Rect [200 490 300 506] ${DA10}`),
+      // 18 parent carrying the size, 19 its widget with no /DA
+      `<< /FT /Tx /T (Inherited) /V (FROM PARENT) ${DA10} /Kids [19 0 R] >>`,
+      '<< /Type /Annot /Subtype /Widget /Parent 18 0 R /P 3 0 R /F 4 /Rect [200 460 400 476] >>',
+      // 20 relies on /AcroForm /DA
+      widget('/F 4 /FT /Tx /T (FormDefault) /V (FROM ACROFORM) /Rect [200 430 400 446]'),
+      // 21 one field, 22 and 23 its two widgets
+      `<< /FT /Tx /T (Shared) /V (SAME) ${DA10} /Kids [22 0 R 23 0 R] >>`,
+      '<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /F 4 /Rect [200 400 300 416] >>',
+      '<< /Type /Annot /Subtype /Widget /Parent 21 0 R /P 3 0 R /F 4 /Rect [320 400 420 416] >>',
+    ],
+    1,
+  );
+};
+
 await mkdir(OUT, { recursive: true });
 await mkdir(join(OUT, 'local'), { recursive: true });
 
