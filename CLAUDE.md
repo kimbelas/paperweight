@@ -136,6 +136,27 @@ the decisions. `docs/research/01-editing-engines.md` and
   the form, not the content stream, so there is nothing to regenerate, and
   calling `GenerateContent` would rewrite a page the user never edited.
   `commit` and `commitSync` take a `repaint` list for exactly this case.
+- **A widget is addressed by its object number, never by its name.** Every
+  option of a radio group shares one name, and so does every widget of a
+  field shown twice; looking fields up by name made the second radio option
+  tick the first, and moving one widget of a pair move the other.
+  `FormFieldInfo.ref` is `EPDFAnnot_GetObjectNumber`, every worker method
+  that touches a field takes it, and `withFieldAnnot` resolves it at the
+  moment of the mutation. PDFium's non-incremental save keeps object
+  numbers, which `form-kinds.test.ts` checks across `reload`. Names remain
+  the caption source and nothing else.
+
+- **On touch, a field is hit-tested on the page, with slop.** `PageView`
+  keeps each page's field list and `hitField` answers a tap synchronously,
+  because iOS raises the keyboard only for a focus inside the tap and a worker
+  round trip ends it. A coarse pointer gets `TOUCH_SLOP_PX` around each field,
+  since a fitted 14pt field is smaller than a fingertip and a near miss
+  otherwise edits the caption beside it. Drags go through `trackPointer`,
+  which handles `pointercancel` and a 10px finger threshold, and the outline
+  is the only element with `touch-action: none`. A button inside an editor
+  uses `pressHandlers`: it must not take focus from the input, and WebKit
+  sends no click after a cancelled press, so it acts on release.
+
 
 - **A field clips to its own rectangle, so its width is part of the
   document.** A value wider than the box is cut off in the file — on screen
