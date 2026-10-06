@@ -121,11 +121,7 @@ function widgetRef(doc: PdfDocument, annot: number): number {
 /**
  * Describe an open widget annotation as plain data.
  *
- * `annotIndex` is the widget's position in the page's annotation list, which
- * is how the appearance sizes recorded at open time are keyed. It is asked
- * for rather than looked up here because both callers already know it.
- *
- * `siblings` likewise: it is shared across a whole listing so the page is
+ * `siblings` is shared across a whole listing so the page is
  * walked once rather than once per field. See `pageTypeSizes`.
  */
 function describeField(
@@ -133,7 +129,6 @@ function describeField(
   form: number,
   annot: number,
   pageIndex: number,
-  annotIndex: number,
   siblings: () => number[],
 ): FormFieldInfo {
   const { mod } = doc;
@@ -170,7 +165,7 @@ function describeField(
     readOnly,
     editable: typeable && !readOnly && ref !== 0,
     toggleable: clickable && !readOnly && ref !== 0,
-    textSize: drawnSize(doc, annot, annotIndex, pageIndex, rect, siblings),
+    textSize: drawnSize(doc, annot, ref, rect, siblings),
     clips: appearanceTrustworthyAt(doc, form, annot),
     notEditableReason: readOnly
       ? 'The form marks this field read-only, so its value is not meant to be changed here.'
@@ -215,7 +210,6 @@ export function formFieldAt(
       form,
       annot,
       pageIndex,
-      mod.FPDFPage_GetAnnotIndex(page, annot),
       pageTypeSizes(doc, pageIndex),
     );
   } finally {
@@ -238,7 +232,7 @@ export function listFormFields(doc: PdfDocument, pageIndex: number): FormFieldIn
     const annot = mod.FPDFPage_GetAnnot(page, i);
     if (!annot) continue;
     try {
-      const field = describeField(doc, form, annot, pageIndex, i, siblings);
+      const field = describeField(doc, form, annot, pageIndex, siblings);
       // A non-widget annotation reports an unknown field type and no name.
       if (field.kind !== 'unknown' || field.name) fields.push(field);
     } finally {
@@ -537,7 +531,7 @@ function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
 
   // The sizes the file's own appearances use, recorded before the form
   // environment had a chance to generate any of its own.
-  const sizes: number[] = [...doc.originalApSizesOnPage(pageIndex)];
+  const sizes: number[] = [];
 
   // Plus anything a field declares outright.
   for (let i = 0; i < count; i++) {
@@ -545,6 +539,8 @@ function siblingFieldSizes(doc: PdfDocument, pageIndex: number): number[] {
     if (!annot) continue;
     try {
       if (mod.FPDFAnnot_GetFormFieldType(form, annot) < 0) continue;
+      const original = doc.originalApSize(widgetRef(doc, annot));
+      if (original !== null && original > 0) sizes.push(original);
       const match = TF.exec(readAnnotString(doc, annot, 'DA'));
       const size = match ? Number(match[2]) : 0;
       if (size > 0) sizes.push(size);
@@ -618,8 +614,7 @@ function pageTypeSizes(doc: PdfDocument, pageIndex: number): () => number[] {
 function drawnSize(
   doc: PdfDocument,
   annot: number,
-  annotIndex: number,
-  pageIndex: number,
+  ref: number,
   rect: Rect,
   siblings: () => number[],
 ): number {
@@ -633,7 +628,7 @@ function drawnSize(
   // field the file left without an appearance, PDFium has already generated
   // one at the auto size, and preserving that would preserve the very thing
   // being fixed.
-  const original = doc.originalApSize(pageIndex, annotIndex);
+  const original = doc.originalApSize(ref);
   if (original !== null && original > 0) return original;
 
   // 3. What the rest of the form uses.
@@ -656,7 +651,6 @@ function resolveTextSize(
   doc: PdfDocument,
   field: FormFieldInfo,
   annot: number,
-  annotIndex: number,
 ): { font: string; size: number; fill: string } | null {
   const da = readAnnotString(doc, annot, 'DA');
   const daTf = TF.exec(da);
@@ -674,7 +668,7 @@ function resolveTextSize(
 
   return {
     font,
-    size: drawnSize(doc, annot, annotIndex, field.page, field.rect, pageTypeSizes(doc, field.page)),
+    size: drawnSize(doc, annot, field.ref, field.rect, pageTypeSizes(doc, field.page)),
     fill,
   };
 }
@@ -689,8 +683,8 @@ function pinTextSize(doc: PdfDocument, field: FormFieldInfo): boolean {
   const { mod } = doc;
   let changed = false;
 
-  withFieldAnnot(doc, field.page, field.ref, (annot, _form, annotIndex) => {
-    const style = resolveTextSize(doc, field, annot, annotIndex);
+  withFieldAnnot(doc, field.page, field.ref, (annot) => {
+    const style = resolveTextSize(doc, field, annot);
     if (!style) return;
 
     const da = `/${style.font} ${round2(style.size)} Tf ${style.fill}`;
@@ -716,8 +710,8 @@ function round2(value: number): number {
  */
 function effectiveFieldSize(doc: PdfDocument, field: FormFieldInfo): number {
   const siblings = pageTypeSizes(doc, field.page);
-  return withFieldAnnot(doc, field.page, field.ref, (annot, _form, annotIndex) =>
-    drawnSize(doc, annot, annotIndex, field.page, field.rect, siblings),
+  return withFieldAnnot(doc, field.page, field.ref, (annot) =>
+    drawnSize(doc, annot, field.ref, field.rect, siblings),
   );
 }
 

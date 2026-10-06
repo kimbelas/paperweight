@@ -748,8 +748,11 @@ export class EditorSession {
 
   private reopenSync(bytes: Uint8Array): void {
     if (!this.mod) throw new Error('The PDF engine is not loaded.');
+    // The sizes recorded at the first open of this file, not sizes read off
+    // bytes PDFium has already regenerated: see `PdfDocument.appearanceSizes`.
+    const sizes = this.doc?.appearanceSizes;
     this.closeDocument();
-    this.doc = PdfDocument.open(this.mod, bytes);
+    this.doc = PdfDocument.open(this.mod, bytes, '', sizes);
     this.signatureScan = null;
   }
 }

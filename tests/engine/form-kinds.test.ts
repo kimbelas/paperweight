@@ -91,3 +91,26 @@ describe('widget identity', () => {
     session.close();
   });
 });
+
+describe('appearance sizes', () => {
+  it('survive a reload of the document', async () => {
+    await withFixture('autosize-no-appearance.pdf', (doc) => {
+      expect(formFieldByName(doc, 0, 'Surname')!.textSize).toBe(9);
+      doc.reload(doc.save());
+      expect(formFieldByName(doc, 0, 'Surname')!.textSize).toBe(9);
+    });
+  });
+
+  it('survive undo', async () => {
+    await loadEngine();
+    const session = new EditorSession();
+    await session.open(await fixtureBytes('autosize-no-appearance.pdf'));
+    const given = session.formFields(0).find((f) => f.name === 'GivenNames')!;
+
+    await session.setFormFieldValue(0, given.ref, 'JANE');
+    await session.undo();
+
+    expect(session.formFields(0).find((f) => f.name === 'Surname')!.textSize).toBe(9);
+    session.close();
+  });
+});

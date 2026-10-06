@@ -294,9 +294,12 @@ the decisions. `docs/research/01-editing-engines.md` and
   auto size. After that instant there is no way to tell a stream the file
   supplied from one PDFium invented, so "the size this field is really drawn
   at" becomes unanswerable and preserving it would preserve the bug. The
-  snapshot is keyed by annotation index, since a field's name can live on a
-  parent rather than the widget; undo reopens the document and re-runs it, so
-  it cannot go stale.
+  snapshot is keyed by widget object number and taken once, at the first
+  open of a file. `reload` and the session's reopen for undo, redo and rollback
+  carry it forward, because every later open reads bytes that `doc.save()` wrote
+  after the environment existed: re-snapshotting them recorded PDFium's 18pt
+  auto size as the file's own, and an undo brought every auto-sized field back
+  at 18pt.
 
 - **`scripts/inspect-form.mjs` reports a form's structure and no values.** For
   diagnosing a real document without handling somebody's passport number: it
