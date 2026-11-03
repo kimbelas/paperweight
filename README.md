@@ -1,4 +1,4 @@
-# Paperweight — a free PDF editor that runs in your browser
+# Paperweight - a free PDF editor that runs in your browser
 
 Paperweight is a free PDF editor that runs entirely inside your browser tab.
 It changes the text already on the page, removes or adds signatures, fills in
@@ -10,7 +10,7 @@ make, and nothing to pay.
 Every document stays on your own machine. The PDF engine is PDFium, compiled
 to WebAssembly and run in a Web Worker inside the tab, so a file is opened,
 edited and saved without ever being uploaded. There is no upload path, no
-analytics and no third-party script — and the browser tests fail if a single
+analytics and no third-party script, and the browser tests fail if a single
 cross-origin request is made while a document is open.
 
 **Status:** working. The editing engine is complete and tested; several UI
@@ -18,7 +18,7 @@ conveniences are still open. See `TASKS.md`.
 
 ## Screenshots
 
-Edit the text that is already in a PDF — click a line and retype it:
+Edit the text that is already in a PDF: click a line and retype it:
 
 ![Editing an existing line of text in a PDF in the browser, with the original line replaced in place by an inline editor](docs/screenshots/02-edit-text.png)
 
@@ -163,7 +163,7 @@ compares the two, and another compares these headings to it.
 
 ## Browsers
 
-The browser suite runs in Chromium, Firefox and WebKit — every test, in each
+The browser suite runs in Chromium, Firefox and WebKit: every test, in each
 engine, against the built site under its real response headers. What differs
 between them is written down because the app changes its own behaviour to
 match:
@@ -176,7 +176,7 @@ match:
 
 Saving in place needs the File System Access API, which only Chromium
 implements. Elsewhere the button reads **Download** and produces a copy, which
-is the one difference a user meets — and the interface says which of the two it
+is the one difference a user meets, and the interface says which of the two it
 is doing rather than implying the original was overwritten.
 
 Edge is not run separately. It is Chromium with the same engine and the same
@@ -189,7 +189,7 @@ does test layout, the print path and the download fallback. It does not test
 the offline mode: Playwright supports service workers on Chromium-based
 browsers only, so the two tests that cut the network skip there. What is still
 asserted in WebKit is that the worker installs, takes control and fills both
-caches — which it does, identically to Chromium. Confirming the offline path in
+caches, which it does, identically to Chromium. Confirming the offline path in
 Safari proper is a manual pass, and `TASKS.md` tracks it alongside printing.
 
 ## Running it
@@ -214,18 +214,18 @@ the browser tests serves it with nothing but a static file server to prove it.
 ## How it is described to machines
 
 The site is meant to be found and to be summarised correctly by things that
-never run it — search crawlers, answer engines and language models. Four files
+never run it: search crawlers, answer engines and language models. Four files
 carry that, and all four are generated from one source so they cannot
 contradict each other or the visible page:
 
 | File | What it is |
 |---|---|
-| `app/sitemap.ts` → `/sitemap.xml` | One URL, with a `lastmod` bumped by hand rather than at build time — a date that is always today is a signal crawlers learn to discount |
+| `app/sitemap.ts` → `/sitemap.xml` | One URL, with a `lastmod` bumped by hand rather than at build time: a date that is always today is a signal crawlers learn to discount |
 | `app/robots.ts` → `/robots.txt` | Nothing disallowed, including the crawlers that feed answer engines, plus a Cloudflare `Content-Signal` |
 | `public/llms.txt` | The plain-text brief: what it does, and what it deliberately does not do |
 | `src/structured-data.ts` | `SoftwareApplication` and `FAQPage` JSON-LD, built from the same strings the page renders |
 
-`src/site.ts` holds every public string — the headline, the lead paragraph
+`src/site.ts` holds every public string: the headline, the lead paragraph
 written to be quotable on its own, the FAQ, the keywords. `tests/e2e/seo.spec.ts`
 compares the structured data against the rendered page, because structured
 data that contradicts the page is worse than none.
@@ -281,7 +281,7 @@ Script, Great Vibes, Caveat) are SIL OFL 1.1, with their licence files in
 `public/fonts/`. No AGPL dependencies, which is why PDFium is used rather than
 MuPDF.
 
-Both engines would fetch assets from a CDN by default. All of them — the PDF
-WASM, the OCR worker, its core and its language model — are served from
+Both engines would fetch assets from a CDN by default. All of them, the PDF
+WASM, the OCR worker, its core and its language model, are served from
 `public/`, so the app works offline and makes no outbound requests. Three
 browser tests hold that in place.
