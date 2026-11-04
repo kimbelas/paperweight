@@ -216,7 +216,7 @@ the browser tests serves it with nothing but a static file server to prove it.
 - Install first: `pnpm install --frozen-lockfile`
 - Verify (typecheck, format check, unit tests): `pnpm typecheck && pnpm format:check && pnpm test`
 - Test: `pnpm test`
-- End to end: `pnpm build && pnpm test:e2e --project=chromium`
+- End to end: `pnpm build && pnpm test:e2e --project=chromium` (chromium only, the quick run; the full three-engine run is `pnpm test:e2e` in the block above)
 
 ## How it is described to machines
 
