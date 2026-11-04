@@ -211,6 +211,13 @@ pnpm shots        # regenerate docs/screenshots/ from the built site
 `pnpm build` emits a plain static site. It can be hosted anywhere, and one of
 the browser tests serves it with nothing but a static file server to prove it.
 
+## Running the checks
+
+- Install first: `pnpm install --frozen-lockfile`
+- Verify (typecheck, format check, unit tests): `pnpm typecheck && pnpm format:check && pnpm test`
+- Test: `pnpm test`
+- End to end: `pnpm build && pnpm test:e2e --project=chromium` (chromium only, the quick run; the full three-engine run is `pnpm test:e2e` in the block above)
+
 ## How it is described to machines
 
 The site is meant to be found and to be summarised correctly by things that
